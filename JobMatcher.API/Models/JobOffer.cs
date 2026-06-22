@@ -14,6 +14,7 @@ public class JobOffer
     public List<RequiredSkill> NiceToHaveSkills { get; set; } = [];
     public List<EmploymentType> EmploymentTypes { get; set; } = [];
     public string PublishedAt { get; set; } = "";
+    public string? Body { get; set; }
 }
 
 public class RequiredSkill

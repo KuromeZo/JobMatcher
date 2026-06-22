@@ -28,7 +28,6 @@ public class JobFetcherService
     {
         var allOffers = new List<JobOffer>();
         
-
         foreach (var category in Categories)
         {
             _logger.LogInformation("Fetching category: {Category}", category);
@@ -44,8 +43,13 @@ public class JobFetcherService
         _logger.LogInformation("Found {Total} offers, {Junior} junior",
             allOffers.Count, juniorOffers.Count);
         
+        foreach (var offer in juniorOffers)
+        {
+            _logger.LogInformation("Fetching body for: {Title}", offer.Title);
+            offer.Body = await FetchOfferBodyAsync(offer.Slug);
+            await Task.Delay(300);
+        }
         
-
         return juniorOffers;
     }
 
@@ -107,5 +111,29 @@ public class JobFetcherService
             url += $"&cursor={cursor.Value}";
 
         return url;
+    }
+    
+    public async Task<string?> FetchOfferBodyAsync(string slug)
+    {
+        var options = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
+        try
+        {
+            var url = $"{BaseUrl}/{slug}";
+            var response = await _httpClient.GetAsync(url);
+            response.EnsureSuccessStatusCode();
+
+            var json = await response.Content.ReadAsStringAsync();
+            var offer = JsonSerializer.Deserialize<JobOffer>(json, options);
+            return offer?.Body;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch body for {Slug}", slug);
+            return null;
+        }
     }
 }
