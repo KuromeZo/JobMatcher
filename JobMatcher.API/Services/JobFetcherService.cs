@@ -37,7 +37,6 @@ public class JobFetcherService
 
         var juniorOffers = allOffers
             .DistinctBy(o => o.Guid)
-            .Where(o => o.ExperienceLevel == "junior")
             .ToList();
 
         _logger.LogInformation("Found {Total} offers, {Junior} junior",
@@ -105,7 +104,7 @@ public class JobFetcherService
 
     private static string BuildUrl(string category, int? cursor)
     {
-        var url = $"{BaseUrl}?categories={category}&sortBy=publishedAt&orderBy=descending&";
+        var url = $"{BaseUrl}?categories={category}&experienceLevels=junior&sortBy=publishedAt&orderBy=descending";
 
         if (cursor.HasValue)
             url += $"&cursor={cursor.Value}";

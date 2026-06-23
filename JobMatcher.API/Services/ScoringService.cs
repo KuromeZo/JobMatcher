@@ -48,7 +48,7 @@ public class ScoringService
 
         var requestBody = new
         {
-            model = "claude-sonnet-4-6",
+            model = "claude-haiku-4-5-20251001",
             max_tokens = 1000,
             messages = new[]
             {
@@ -80,8 +80,20 @@ public class ScoringService
                 .GetProperty("content")[0]
                 .GetProperty("text")
                 .GetString() ?? "";
+            
+            _logger.LogInformation("Claude response: {Text}", text);
 
-            var result = JsonSerializer.Deserialize<ScoreResult>(text,
+// Убираем markdown обёртку если Haiku добавил ```json ... ```
+            var cleanText = text.Trim();
+            if (cleanText.StartsWith("```"))
+            {
+                cleanText = cleanText
+                    .Replace("```json", "")
+                    .Replace("```", "")
+                    .Trim();
+            }
+
+            var result = JsonSerializer.Deserialize<ScoreResult>(cleanText,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
             if (result == null) return null;
