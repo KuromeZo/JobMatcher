@@ -1,6 +1,7 @@
 ﻿using System.Text.Json;
 using JobMatcher.API.Data;
-using JobMatcher.API.Models;
+using JobMatcher.API.Models.Domain;
+using JobMatcher.API.Models.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace JobMatcher.API.Repositories;

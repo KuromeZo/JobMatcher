@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace JobMatcher.API.Models;
+namespace JobMatcher.API.Models.Persistence;
 
 public class ScoredJobEntity
 {

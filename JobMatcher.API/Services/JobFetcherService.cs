@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
-using JobMatcher.API.Models;
+using JobMatcher.API.Models.Domain;
+using JobMatcher.API.Models.External.JustJoinIt;
 
 namespace JobMatcher.API.Services;
 

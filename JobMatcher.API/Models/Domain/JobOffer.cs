@@ -1,4 +1,4 @@
-﻿namespace JobMatcher.API.Models;
+﻿namespace JobMatcher.API.Models.Domain;
 
 public class JobOffer
 {
@@ -30,23 +30,6 @@ public class EmploymentType
     public string Currency { get; set; } = "";
     public string Type { get; set; } = "";
     public string Unit { get; set; } = "";
-}
-
-public class JustJoinItResponse
-{
-    public List<JobOffer> Data { get; set; } = [];
-    public Meta Meta { get; set; } = new();
-}
-
-public class Meta
-{
-    public int TotalItems { get; set; }
-    public NextPage? Next { get; set; }
-}
-
-public class NextPage
-{
-    public int? Cursor { get; set; }
 }
 
 public class JobCategory

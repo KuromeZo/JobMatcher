@@ -1,7 +1,8 @@
 ﻿using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using JobMatcher.API.Models;
+using JobMatcher.API.Models.Domain;
+using JobMatcher.API.Models.External.Claude;
 
 namespace JobMatcher.API.Services;
 
@@ -93,7 +94,7 @@ public class ScoringService
                     .Trim();
             }
 
-            var result = JsonSerializer.Deserialize<ScoreResult>(cleanText,
+            var result = JsonSerializer.Deserialize<ClaudeScoreResult>(cleanText,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
             if (result == null) return null;
@@ -129,12 +130,4 @@ public class ScoringService
     {
         return Regex.Replace(html, "<.*?>", " ").Trim();
     }
-}
-
-public class ScoreResult
-{
-    public int Score { get; set; }
-    public List<string> Matches { get; set; } = [];
-    public List<string> ToLearn { get; set; } = [];
-    public string Verdict { get; set; } = "";
 }
