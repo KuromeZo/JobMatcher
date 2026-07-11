@@ -1,18 +1,19 @@
 ﻿using System.Text.Json;
 using JobMatcher.API.Models.Domain;
 using JobMatcher.API.Models.External.JustJoinIt;
+using JobMatcher.API.Services.Interfaces;
 
-namespace JobMatcher.API.Services;
+namespace JobMatcher.API.Services.JustJoinIt;
 
-public class JobFetcherService
+public class JustJoinItFetcherService : IJobFetcherService
 {
     private readonly HttpClient _httpClient;
-    private readonly ILogger<JobFetcherService> _logger;
+    private readonly ILogger<JustJoinItFetcherService> _logger;
 
     private static readonly string[] Categories = ["net", "data", "java", "javascript"];
     private const string BaseUrl = "https://justjoin.it/api/candidate-api/offers";
 
-    public JobFetcherService(HttpClient httpClient, ILogger<JobFetcherService> logger)
+    public JustJoinItFetcherService(HttpClient httpClient, ILogger<JustJoinItFetcherService> logger)
     {
         _httpClient = httpClient;
         _logger = logger;
@@ -28,7 +29,7 @@ public class JobFetcherService
     public async Task<List<JobOffer>> FetchJuniorOffersAsync()
     {
         var allOffers = new List<JobOffer>();
-        
+
         foreach (var category in Categories)
         {
             _logger.LogInformation("Fetching category: {Category}", category);
@@ -42,14 +43,14 @@ public class JobFetcherService
 
         _logger.LogInformation("Found {Total} offers, {Junior} junior",
             allOffers.Count, juniorOffers.Count);
-        
+
         foreach (var offer in juniorOffers)
         {
             _logger.LogInformation("Fetching body for: {Title}", offer.Title);
             offer.Body = await FetchOfferBodyAsync(offer.Slug);
             await Task.Delay(300);
         }
-        
+
         return juniorOffers;
     }
 
@@ -60,10 +61,7 @@ public class JobFetcherService
         int pageCount = 0;
         const int maxPages = 10;
 
-        var options = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        };
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
         do
         {
@@ -106,19 +104,14 @@ public class JobFetcherService
     private static string BuildUrl(string category, int? cursor)
     {
         var url = $"{BaseUrl}?categories={category}&experienceLevels=junior&sortBy=publishedAt&orderBy=descending";
-
         if (cursor.HasValue)
             url += $"&cursor={cursor.Value}";
-
         return url;
     }
-    
-    public async Task<string?> FetchOfferBodyAsync(string slug)
+
+    private async Task<string?> FetchOfferBodyAsync(string slug)
     {
-        var options = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        };
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
         try
         {

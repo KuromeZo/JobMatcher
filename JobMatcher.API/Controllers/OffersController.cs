@@ -1,5 +1,4 @@
-﻿using JobMatcher.API.Repositories;
-using JobMatcher.API.Services;
+﻿using JobMatcher.API.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
 namespace JobMatcher.API.Controllers;
@@ -8,15 +7,13 @@ namespace JobMatcher.API.Controllers;
 [Route("api/[controller]")]
 public class OffersController : ControllerBase
 {
-    private readonly JobFetcherService _fetcher;
-    private readonly ScoringService _scorer;
-    private readonly JobRepository _repo;
+    private readonly IJobScoringOrchestrator _orchestrator;
+    private readonly IJobFetcherService _fetcher;
 
-    public OffersController(JobFetcherService fetcher, ScoringService scorer, JobRepository repo)
+    public OffersController(IJobScoringOrchestrator orchestrator, IJobFetcherService fetcher)
     {
+        _orchestrator = orchestrator;
         _fetcher = fetcher;
-        _scorer = scorer;
-        _repo = repo;
     }
 
     [HttpGet("fetch")]
@@ -29,35 +26,7 @@ public class OffersController : ControllerBase
     [HttpGet("score")]
     public async Task<IActionResult> ScoreOffers()
     {
-        var offers = await _fetcher.FetchJuniorOffersAsync();
-        var scoredJobs = new List<object>();
-
-        foreach (var offer in offers)
-        {
-            // Сначала проверяем кеш
-            var cached = await _repo.GetCachedAsync(offer.Guid);
-            if (cached != null)
-            {
-                cached.Offer = offer;
-                if (cached.Score >= 6)
-                    scoredJobs.Add(cached);
-                continue;
-            }
-
-            // Нет в кеше — спрашиваем Claude
-            var scored = await _scorer.ScoreJobAsync(offer);
-            if (scored != null)
-            {
-                await _repo.SaveAsync(offer.Guid, scored);
-                if (scored.Score >= 6)
-                    scoredJobs.Add(scored);
-            }
-        }
-
-        var sorted = scoredJobs
-            .OrderByDescending(s => ((dynamic)s).Score)
-            .ToList();
-
-        return Ok(new { total = sorted.Count, jobs = sorted });
+        var jobs = await _orchestrator.GetScoredJobsAsync();
+        return Ok(new { total = jobs.Count, jobs });
     }
 }
