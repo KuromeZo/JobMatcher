@@ -23,4 +23,24 @@ Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.doc
 < C:/CV_temples/CV_NET/Martin_Zanko_CV_NET.docx
 --boundary--
 
+### Register
+POST http://localhost:5212/api/auth/register
+Content-Type: application/json
+
+{
+  "login": "martin",
+  "password": "123456"
+}
+
+###
+
+### Login
+POST http://localhost:5212/api/auth/login
+Content-Type: application/json
+
+{
+  "login": "martin",
+  "password": "123456"
+}
+
 ###

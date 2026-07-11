@@ -1,11 +1,13 @@
 ﻿using JobMatcher.API.Models.Domain;
 using JobMatcher.API.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace JobMatcher.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class OffersController : ControllerBase
 {
     private readonly IJobScoringOrchestrator _orchestrator;

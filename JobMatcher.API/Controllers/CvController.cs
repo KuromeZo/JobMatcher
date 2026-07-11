@@ -1,11 +1,13 @@
 ﻿using JobMatcher.API.Services;
 using JobMatcher.API.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace JobMatcher.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class CvController : ControllerBase
 {
     private readonly DocxTextExtractorService _extractor;

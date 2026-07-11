@@ -9,4 +9,5 @@ public class AppDbContext : DbContext
 
     public DbSet<ScoredJobEntity> ScoredJobs { get; set; }
     public DbSet<JobOfferEntity> JobOffers { get; set; }
+    public DbSet<UserEntity> Users { get; set; }
 }
