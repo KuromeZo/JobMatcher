@@ -12,6 +12,7 @@ public class JustJoinItFetcherService : IJobFetcherService
 
     private static readonly string[] Categories = ["net", "data", "java", "javascript"];
     private const string BaseUrl = "https://justjoin.it/api/candidate-api/offers";
+    private const int ConsecutiveKnownThreshold = 5;
 
     public JustJoinItFetcherService(HttpClient httpClient, ILogger<JustJoinItFetcherService> logger)
     {
@@ -26,14 +27,14 @@ public class JustJoinItFetcherService : IJobFetcherService
             "https://justjoin.it/job-offers/all-locations");
     }
 
-    public async Task<List<JobOffer>> FetchOffersMetadataAsync()
+    public async Task<List<JobOffer>> FetchOffersMetadataAsync(HashSet<string> existingGuids)
     {
         var allOffers = new List<JobOffer>();
 
         foreach (var category in Categories)
         {
             _logger.LogInformation("Fetching category: {Category}", category);
-            var offers = await FetchCategoryAsync(category);
+            var offers = await FetchCategoryAsync(category, existingGuids);
             allOffers.AddRange(offers);
         }
 
@@ -67,12 +68,13 @@ public class JustJoinItFetcherService : IJobFetcherService
         }
     }
 
-    private async Task<List<JobOffer>> FetchCategoryAsync(string category)
+    private async Task<List<JobOffer>> FetchCategoryAsync(string category, HashSet<string> existingGuids)
     {
         var offers = new List<JobOffer>();
         int? cursor = null;
         int pageCount = 0;
         const int maxPages = 10;
+        int consecutiveKnown = 0;
 
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
@@ -90,7 +92,34 @@ public class JustJoinItFetcherService : IJobFetcherService
 
                 if (result?.Data == null) break;
 
-                offers.AddRange(result.Data);
+                bool shouldStop = false;
+
+                foreach (var offer in result.Data)
+                {
+                    if (existingGuids.Contains(offer.Guid))
+                    {
+                        consecutiveKnown++;
+                        _logger.LogDebug("Known offer: {Guid}, streak: {Streak}", 
+                            offer.Guid, consecutiveKnown);
+
+                        if (consecutiveKnown >= ConsecutiveKnownThreshold)
+                        {
+                            _logger.LogInformation(
+                                "Stopping category {Category} - found {Streak} consecutive known offers",
+                                category, consecutiveKnown);
+                            shouldStop = true;
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        consecutiveKnown = 0;
+                        offers.Add(offer);
+                    }
+                }
+
+                if (shouldStop) break;
+
                 pageCount++;
 
                 cursor = result.Meta?.Next?.Cursor.HasValue == true && result.Data.Count > 0

@@ -29,19 +29,21 @@ public class JobScoringOrchestrator : IJobScoringOrchestrator
     public async Task<List<ScoredJob>> GetScoredJobsAsync(CandidateProfile? profile = null)
     {
         profile ??= BuildProfile();
-        
+
         // 1. Удаляем просроченные офферы
         await _repository.DeleteExpiredOffersAsync();
 
-        // 2. Фетчим метаданные с JustJoinIT (без body)
-        var fetchedOffers = await _fetcher.FetchOffersMetadataAsync();
+        // 2. Получаем существующие guids из БД
         var existingGuids = await _repository.GetExistingGuidAsync();
 
-        // 3. Сохраняем только новые офферы (с body) в БД
+        // 3. Фетчим метаданные с JustJoinIT — останавливаемся при стрике из 5 известных
+        var fetchedOffers = await _fetcher.FetchOffersMetadataAsync(existingGuids);
+
+        // 4. Фетчим body только для новых офферов и сохраняем в БД
         var newOffers = fetchedOffers
             .Where(o => !existingGuids.Contains(o.Guid))
             .ToList();
-        
+
         _logger.LogInformation("Found {New} new offers out of {Total} fetched",
             newOffers.Count, fetchedOffers.Count);
 
@@ -54,7 +56,7 @@ public class JobScoringOrchestrator : IJobScoringOrchestrator
 
         await _repository.SaveOffersAsync(newOffers);
 
-        // 4. Скорим все офферы из БД
+        // 5. Скорим все офферы — новые через Claude, старые из кеша
         var scoredJobs = new List<ScoredJob>();
 
         foreach (var offer in fetchedOffers)

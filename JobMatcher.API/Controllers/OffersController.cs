@@ -22,7 +22,7 @@ public class OffersController : ControllerBase
     [HttpGet("fetch")]
     public async Task<IActionResult> FetchOffers()
     {
-        var offers = await _fetcher.FetchOffersMetadataAsync();
+        var offers = await _fetcher.FetchOffersMetadataAsync([]);
         return Ok(new { total = offers.Count, offers });
     }
 
