@@ -1,11 +1,13 @@
 ﻿using System.Text.Json;
 using JobMatcher.API.Data;
-using JobMatcher.API.Models;
+using JobMatcher.API.Models.Domain;
+using JobMatcher.API.Models.Persistence;
+using JobMatcher.API.Repositories.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace JobMatcher.API.Repositories;
 
-public class JobRepository
+public class JobRepository : IJobRepository
 {
     private readonly AppDbContext _db;
 
@@ -31,7 +33,7 @@ public class JobRepository
     public async Task SaveAsync(string guid, ScoredJob scored)
     {
         var existing = await _db.ScoredJobs.FindAsync(guid);
-        if (existing != null) return; // уже есть
+        if (existing != null) return;
 
         _db.ScoredJobs.Add(new ScoredJobEntity
         {

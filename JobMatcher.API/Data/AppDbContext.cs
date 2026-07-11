@@ -1,4 +1,4 @@
-﻿using JobMatcher.API.Models;
+﻿using JobMatcher.API.Models.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace JobMatcher.API.Data;

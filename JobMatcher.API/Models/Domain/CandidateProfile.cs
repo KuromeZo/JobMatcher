@@ -1,4 +1,4 @@
-﻿namespace JobMatcher.API.Models;
+﻿namespace JobMatcher.API.Models.Domain;
 
 public class CandidateProfile
 {
