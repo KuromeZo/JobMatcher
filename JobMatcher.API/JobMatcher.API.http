@@ -1,6 +1,26 @@
 @JobMatcher.API_HostAddress = http://localhost:5212
 
-GET {{JobMatcher.API_HostAddress}}/weatherforecast/
+### Fetch offers
+GET http://localhost:5212/api/offers/fetch
 Accept: application/json
+
+###
+
+### Score offers
+GET http://localhost:5212/api/offers/score
+Accept: application/json
+
+###
+
+### Upload CV
+POST http://localhost:5212/api/cv/upload
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="Martin_Zanko_CV_NET.docx"
+Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+
+< C:/CV_temples/CV_NET/Martin_Zanko_CV_NET.docx
+--boundary--
 
 ###

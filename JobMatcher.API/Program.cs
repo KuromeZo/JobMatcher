@@ -22,6 +22,10 @@ builder.Services.AddHttpClient<IJobFetcherService, JustJoinItFetcherService>();
 builder.Services.AddHttpClient<IAiScoringService, ClaudeAiScoringService>();
 builder.Services.AddScoped<IJobScoringOrchestrator, JobScoringOrchestrator>();
 
+// CV parsing
+builder.Services.AddScoped<DocxTextExtractorService>();
+builder.Services.AddHttpClient<IAiCvParserService, ClaudeAiCvParserService>();
+
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
