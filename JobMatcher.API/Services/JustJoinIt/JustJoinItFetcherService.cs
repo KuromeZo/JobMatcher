@@ -26,7 +26,7 @@ public class JustJoinItFetcherService : IJobFetcherService
             "https://justjoin.it/job-offers/all-locations");
     }
 
-    public async Task<List<JobOffer>> FetchJuniorOffersAsync()
+    public async Task<List<JobOffer>> FetchOffersMetadataAsync()
     {
         var allOffers = new List<JobOffer>();
 
@@ -37,21 +37,34 @@ public class JustJoinItFetcherService : IJobFetcherService
             allOffers.AddRange(offers);
         }
 
-        var juniorOffers = allOffers
+        var uniqueOffers = allOffers
             .DistinctBy(o => o.Guid)
             .ToList();
 
-        _logger.LogInformation("Found {Total} offers, {Junior} junior",
-            allOffers.Count, juniorOffers.Count);
+        _logger.LogInformation("Fetched {Total} unique offers across all categories", uniqueOffers.Count);
 
-        foreach (var offer in juniorOffers)
+        return uniqueOffers;
+    }
+
+    public async Task<string?> FetchOfferBodyAsync(string slug)
+    {
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+        try
         {
-            _logger.LogInformation("Fetching body for: {Title}", offer.Title);
-            offer.Body = await FetchOfferBodyAsync(offer.Slug);
-            await Task.Delay(300);
-        }
+            var url = $"{BaseUrl}/{slug}";
+            var response = await _httpClient.GetAsync(url);
+            response.EnsureSuccessStatusCode();
 
-        return juniorOffers;
+            var json = await response.Content.ReadAsStringAsync();
+            var offer = JsonSerializer.Deserialize<JobOffer>(json, options);
+            return offer?.Body;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch body for {Slug}", slug);
+            return null;
+        }
     }
 
     private async Task<List<JobOffer>> FetchCategoryAsync(string category)
@@ -84,8 +97,8 @@ public class JustJoinItFetcherService : IJobFetcherService
                     ? (cursor ?? 0) + result.Data.Count
                     : null;
 
-                _logger.LogInformation("Category {Category} page {Page}/{Max}, got {Count} offers, next cursor: {Cursor}",
-                    category, pageCount, maxPages, result.Data.Count, cursor);
+                _logger.LogInformation("Category {Category} page {Page}/{Max}, got {Count} offers",
+                    category, pageCount, maxPages, result.Data.Count);
 
                 await Task.Delay(300);
             }
@@ -107,26 +120,5 @@ public class JustJoinItFetcherService : IJobFetcherService
         if (cursor.HasValue)
             url += $"&cursor={cursor.Value}";
         return url;
-    }
-
-    private async Task<string?> FetchOfferBodyAsync(string slug)
-    {
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-
-        try
-        {
-            var url = $"{BaseUrl}/{slug}";
-            var response = await _httpClient.GetAsync(url);
-            response.EnsureSuccessStatusCode();
-
-            var json = await response.Content.ReadAsStringAsync();
-            var offer = JsonSerializer.Deserialize<JobOffer>(json, options);
-            return offer?.Body;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to fetch body for {Slug}", slug);
-            return null;
-        }
     }
 }

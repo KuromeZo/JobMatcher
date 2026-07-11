@@ -4,5 +4,6 @@ namespace JobMatcher.API.Services.Interfaces;
 
 public interface IJobFetcherService
 {
-    Task<List<JobOffer>> FetchJuniorOffersAsync();
+    Task<List<JobOffer>> FetchOffersMetadataAsync();
+    Task<string?> FetchOfferBodyAsync(string slug);
 }
