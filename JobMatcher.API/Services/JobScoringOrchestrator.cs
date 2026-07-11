@@ -28,15 +28,40 @@ public class JobScoringOrchestrator : IJobScoringOrchestrator
 
     public async Task<List<ScoredJob>> GetScoredJobsAsync()
     {
+        // 1. Удаляем просроченные офферы
+        await _repository.DeleteExpiredOffersAsync();
+
+        // 2. Фетчим метаданные с JustJoinIT (без body)
+        var fetchedOffers = await _fetcher.FetchOffersMetadataAsync();
+        var existingGuids = await _repository.GetExistingGuidAsync();
+
+        // 3. Сохраняем только новые офферы (с body) в БД
+        var newOffers = fetchedOffers
+            .Where(o => !existingGuids.Contains(o.Guid))
+            .ToList();
+        
+        _logger.LogInformation("Found {New} new offers out of {Total} fetched",
+            newOffers.Count, fetchedOffers.Count);
+
+        foreach (var offer in newOffers)
+        {
+            _logger.LogInformation("Fetching body for new offer: {Title}", offer.Title);
+            offer.Body = await _fetcher.FetchOfferBodyAsync(offer.Slug);
+            await Task.Delay(300);
+        }
+
+        await _repository.SaveOffersAsync(newOffers);
+
+        // 4. Скорим все офферы из БД
         var profile = BuildProfile();
-        var offers = await _fetcher.FetchJuniorOffersAsync();
         var scoredJobs = new List<ScoredJob>();
 
-        foreach (var offer in offers)
+        foreach (var offer in fetchedOffers)
         {
-            var cached = await _repository.GetCachedAsync(offer.Guid);
+            var cached = await _repository.GetCachedScoreAsync(offer.Guid);
             if (cached != null)
             {
+                offer.Body = await _repository.GetOfferBodyAsync(offer.Guid);
                 cached.Offer = offer;
                 if (cached.Score >= 6)
                     scoredJobs.Add(cached);
@@ -46,7 +71,7 @@ public class JobScoringOrchestrator : IJobScoringOrchestrator
             var scored = await _scorer.ScoreJobAsync(offer, profile);
             if (scored != null)
             {
-                await _repository.SaveAsync(offer.Guid, scored);
+                await _repository.SaveScoreAsync(offer.Guid, scored);
                 if (scored.Score >= 6)
                     scoredJobs.Add(scored);
             }
