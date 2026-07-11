@@ -26,8 +26,10 @@ public class JobScoringOrchestrator : IJobScoringOrchestrator
         _logger = logger;
     }
 
-    public async Task<List<ScoredJob>> GetScoredJobsAsync()
+    public async Task<List<ScoredJob>> GetScoredJobsAsync(CandidateProfile? profile = null)
     {
+        profile ??= BuildProfile();
+        
         // 1. Удаляем просроченные офферы
         await _repository.DeleteExpiredOffersAsync();
 
@@ -53,7 +55,6 @@ public class JobScoringOrchestrator : IJobScoringOrchestrator
         await _repository.SaveOffersAsync(newOffers);
 
         // 4. Скорим все офферы из БД
-        var profile = BuildProfile();
         var scoredJobs = new List<ScoredJob>();
 
         foreach (var offer in fetchedOffers)
