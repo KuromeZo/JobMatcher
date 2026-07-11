@@ -10,7 +10,6 @@ public class JustJoinItFetcherService : IJobFetcherService
     private readonly HttpClient _httpClient;
     private readonly ILogger<JustJoinItFetcherService> _logger;
 
-    private static readonly string[] Categories = ["net", "data", "java", "javascript"];
     private const string BaseUrl = "https://justjoin.it/api/candidate-api/offers";
     private const int ConsecutiveKnownThreshold = 5;
 
@@ -27,14 +26,14 @@ public class JustJoinItFetcherService : IJobFetcherService
             "https://justjoin.it/job-offers/all-locations");
     }
 
-    public async Task<List<JobOffer>> FetchOffersMetadataAsync(HashSet<string> existingGuids)
+    public async Task<List<JobOffer>> FetchOffersMetadataAsync(HashSet<string> existingGuids, JobSearchFilters filters)
     {
         var allOffers = new List<JobOffer>();
 
-        foreach (var category in Categories)
+        foreach (var category in filters.Categories)
         {
             _logger.LogInformation("Fetching category: {Category}", category);
-            var offers = await FetchCategoryAsync(category, existingGuids);
+            var offers = await FetchCategoryAsync(category, existingGuids, filters.ExperienceLevels);
             allOffers.AddRange(offers);
         }
 
@@ -68,86 +67,82 @@ public class JustJoinItFetcherService : IJobFetcherService
         }
     }
 
-    private async Task<List<JobOffer>> FetchCategoryAsync(string category, HashSet<string> existingGuids)
+    private async Task<List<JobOffer>> FetchCategoryAsync(string category, HashSet<string> existingGuids, List<string> levels)
+{
+    var offers = new List<JobOffer>();
+    int offset = 0;
+    int pageCount = 0;
+    const int maxPages = 2;
+    int consecutiveKnown = 0;
+
+    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+    do
     {
-        var offers = new List<JobOffer>();
-        int? cursor = null;
-        int pageCount = 0;
-        const int maxPages = 10;
-        int consecutiveKnown = 0;
+        var url = BuildUrl(category, levels, offset);
 
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-
-        do
+        try
         {
-            var url = BuildUrl(category, cursor);
+            var response = await _httpClient.GetAsync(url);
+            response.EnsureSuccessStatusCode();
 
-            try
+            var json = await response.Content.ReadAsStringAsync();
+            var result = JsonSerializer.Deserialize<JustJoinItResponse>(json, options);
+
+            if (result?.Data == null || result.Data.Count == 0) break;
+
+            bool shouldStop = false;
+
+            foreach (var offer in result.Data)
             {
-                var response = await _httpClient.GetAsync(url);
-                response.EnsureSuccessStatusCode();
-
-                var json = await response.Content.ReadAsStringAsync();
-                var result = JsonSerializer.Deserialize<JustJoinItResponse>(json, options);
-
-                if (result?.Data == null) break;
-
-                bool shouldStop = false;
-
-                foreach (var offer in result.Data)
+                if (existingGuids.Contains(offer.Guid))
                 {
-                    if (existingGuids.Contains(offer.Guid))
+                    consecutiveKnown++;
+                    if (consecutiveKnown >= ConsecutiveKnownThreshold)
                     {
-                        consecutiveKnown++;
-                        _logger.LogDebug("Known offer: {Guid}, streak: {Streak}", 
-                            offer.Guid, consecutiveKnown);
-
-                        if (consecutiveKnown >= ConsecutiveKnownThreshold)
-                        {
-                            _logger.LogInformation(
-                                "Stopping category {Category} - found {Streak} consecutive known offers",
-                                category, consecutiveKnown);
-                            shouldStop = true;
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        consecutiveKnown = 0;
-                        offers.Add(offer);
+                        _logger.LogInformation(
+                            "Stopping category {Category} - found {Streak} consecutive known offers",
+                            category, consecutiveKnown);
+                        shouldStop = true;
+                        break;
                     }
                 }
-
-                if (shouldStop) break;
-
-                pageCount++;
-
-                cursor = result.Meta?.Next?.Cursor.HasValue == true && result.Data.Count > 0
-                    ? (cursor ?? 0) + result.Data.Count
-                    : null;
-
-                _logger.LogInformation("Category {Category} page {Page}/{Max}, got {Count} offers",
-                    category, pageCount, maxPages, result.Data.Count);
-
-                await Task.Delay(300);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to fetch category {Category} cursor {Cursor}",
-                    category, cursor);
-                break;
+                else
+                {
+                    consecutiveKnown = 0;
+                    offers.Add(offer);
+                }
             }
 
-        } while (cursor.HasValue && pageCount < maxPages);
+            if (shouldStop) break;
 
-        return offers;
-    }
+            offset += result.Data.Count;
+            pageCount++;
 
-    private static string BuildUrl(string category, int? cursor)
-    {
-        var url = $"{BaseUrl}?categories={category}&experienceLevels=junior&sortBy=publishedAt&orderBy=descending";
-        if (cursor.HasValue)
-            url += $"&cursor={cursor.Value}";
-        return url;
-    }
+            _logger.LogInformation("Category {Category} page {Page}/{Max}, got {Count} offers, offset now: {Offset}",
+                category, pageCount, maxPages, result.Data.Count, offset);
+
+            await Task.Delay(300);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch category {Category} offset {Offset}",
+                category, offset);
+            break;
+        }
+
+    } while (pageCount < maxPages);
+
+    return offers;
+}
+
+private static string BuildUrl(string category, List<string> levels, int offset)
+{
+    var url = $"{BaseUrl}?categories={category}&sortBy=newest&orderBy=descending&itemsCount=10&from={offset}";
+
+    foreach (var level in levels)
+        url += $"&experienceLevels={level}";
+
+    return url;
+}
 }

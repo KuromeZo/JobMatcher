@@ -4,5 +4,6 @@ namespace JobMatcher.API.Services.Interfaces;
 
 public interface IJobScoringOrchestrator
 {
-    Task<List<ScoredJob>> GetScoredJobsAsync(CandidateProfile? profile = null);
+    Task<List<ScoredJob>> GetScoredJobsAsync(int userId, ScoreRequest? request = null);
+    IAsyncEnumerable<ScoredJob> GetScoredJobsStreamAsync(int userId, ScoreRequest? request = null);
 }

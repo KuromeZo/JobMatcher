@@ -5,6 +5,8 @@ namespace JobMatcher.API.Models.Persistence;
 public class ScoredJobEntity
 {
     [Key]
+    public int Id { get; set; }
+    public int UserId { get; set; }
     public string Guid { get; set; } = "";
     public string Title { get; set; } = "";
     public string CompanyName { get; set; } = "";

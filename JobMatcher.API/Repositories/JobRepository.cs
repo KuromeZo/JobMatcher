@@ -16,9 +16,13 @@ public class JobRepository : IJobRepository
         _db = db;
     }
 
-    public async Task<ScoredJob?> GetCachedScoreAsync(string guid)
+    // ─── Scored jobs ───────────────────────────────────────────────────────────
+
+    public async Task<ScoredJob?> GetCachedScoreAsync(string guid, int userId)
     {
-        var entity = await _db.ScoredJobs.FindAsync(guid);
+        var entity = await _db.ScoredJobs
+            .FirstOrDefaultAsync(s => s.Guid == guid && s.UserId == userId);
+
         if (entity == null) return null;
 
         return new ScoredJob
@@ -30,13 +34,16 @@ public class JobRepository : IJobRepository
         };
     }
 
-    public async Task SaveScoreAsync(string guid, ScoredJob scored)
+    public async Task SaveScoreAsync(string guid, ScoredJob scored, int userId)
     {
-        var existing = await _db.ScoredJobs.FindAsync(guid);
+        var existing = await _db.ScoredJobs
+            .FirstOrDefaultAsync(s => s.Guid == guid && s.UserId == userId);
+
         if (existing != null) return;
 
         _db.ScoredJobs.Add(new ScoredJobEntity
         {
+            UserId = userId,
             Guid = guid,
             Title = scored.Offer.Title,
             CompanyName = scored.Offer.CompanyName,
@@ -49,7 +56,19 @@ public class JobRepository : IJobRepository
 
         await _db.SaveChangesAsync();
     }
-    
+
+    public async Task ClearScoresAsync(int userId)
+    {
+        var scores = await _db.ScoredJobs
+            .Where(s => s.UserId == userId)
+            .ToListAsync();
+
+        _db.ScoredJobs.RemoveRange(scores);
+        await _db.SaveChangesAsync();
+    }
+
+    // ─── Job offers ────────────────────────────────────────────────────────────
+
     public async Task<HashSet<string>> GetExistingGuidAsync()
     {
         var guids = await _db.JobOffers
@@ -58,7 +77,7 @@ public class JobRepository : IJobRepository
 
         return [..guids];
     }
-    
+
     public async Task SaveOffersAsync(IEnumerable<JobOffer> offers)
     {
         var existing = await GetExistingGuidAsync();
@@ -86,7 +105,7 @@ public class JobRepository : IJobRepository
         _db.JobOffers.AddRange(newOffers);
         await _db.SaveChangesAsync();
     }
-    
+
     public async Task DeleteExpiredOffersAsync(int daysToKeep = 30)
     {
         var cutoff = DateTime.UtcNow.AddDays(-daysToKeep);
@@ -112,10 +131,29 @@ public class JobRepository : IJobRepository
 
         await _db.SaveChangesAsync();
     }
-    
+
     public async Task<string?> GetOfferBodyAsync(string guid)
     {
         var entity = await _db.JobOffers.FindAsync(guid);
         return entity?.Body;
+    }
+
+    public async Task<List<JobOffer>> GetAllOffersAsync()
+    {
+        var entities = await _db.JobOffers.ToListAsync();
+
+        return entities.Select(e => new JobOffer
+        {
+            Guid = e.Guid,
+            Slug = e.Slug,
+            Title = e.Title,
+            CompanyName = e.CompanyName,
+            City = e.City,
+            WorkplaceType = e.WorkplaceType,
+            RequiredSkills = JsonSerializer.Deserialize<List<RequiredSkill>>(e.RequiredSkillsJson) ?? [],
+            EmploymentTypes = JsonSerializer.Deserialize<List<EmploymentType>>(e.EmploymentTypesJson) ?? [],
+            Body = e.Body,
+            PublishedAt = e.PublishedAt
+        }).ToList();
     }
 }
