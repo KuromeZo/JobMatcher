@@ -118,6 +118,14 @@ public class JobScoringOrchestrator : IJobScoringOrchestrator
 
         // 3. Фетчим метаданные с JustJoinIT
         var fetchedOffers = await _fetcher.FetchOffersMetadataAsync(existingGuids, filters);
+        
+        var fetchedGuids = fetchedOffers.Select(o => o.Guid).ToHashSet();
+        var missedOffers = await _repository.GetOffersByCategoryAsync(
+            filters.Categories, filters.ExperienceLevels);
+        var trulyMissed = missedOffers
+            .Where(o => !fetchedGuids.Contains(o.Guid))
+            .ToList();
+        fetchedOffers.AddRange(trulyMissed);
 
         var newOffers = fetchedOffers
             .Where(o => !existingGuids.Contains(o.Guid))
@@ -143,9 +151,12 @@ public class JobScoringOrchestrator : IJobScoringOrchestrator
         }
 
         // 5. Для уже известных — берём из кеша и сразу отдаём
-        var cachedOffers = fetchedOffers.Count > 0
-            ? fetchedOffers.Where(o => existingGuids.Contains(o.Guid)).ToList()
-            : await _repository.GetAllOffersAsync();
+        var cachedOffers = fetchedOffers
+            .Where(o => existingGuids.Contains(o.Guid))
+            .ToList();
+        
+        _logger.LogInformation("fetchedOffers: {F}, cachedOffers: {C}", 
+            fetchedOffers.Count, cachedOffers.Count);
         
         _logger.LogInformation("CachedOffers count: {Count}", cachedOffers.Count);
 

@@ -156,4 +156,27 @@ public class JobRepository : IJobRepository
             PublishedAt = e.PublishedAt
         }).ToList();
     }
+    
+    public async Task<List<JobOffer>> GetOffersByCategoryAsync(List<string> categories, List<string> levels)
+    {
+        var entities = await _db.JobOffers
+            .Where(o => categories.Contains(o.Category) && levels.Contains(o.ExperienceLevel))
+            .ToListAsync();
+
+        return entities.Select(e => new JobOffer
+        {
+            Guid = e.Guid,
+            Slug = e.Slug,
+            Title = e.Title,
+            CompanyName = e.CompanyName,
+            City = e.City,
+            WorkplaceType = e.WorkplaceType,
+            RequiredSkills = JsonSerializer.Deserialize<List<RequiredSkill>>(e.RequiredSkillsJson) ?? [],
+            EmploymentTypes = JsonSerializer.Deserialize<List<EmploymentType>>(e.EmploymentTypesJson) ?? [],
+            Body = e.Body,
+            PublishedAt = e.PublishedAt,
+            Category = new JobCategory { Key = e.Category },
+            ExperienceLevel = e.ExperienceLevel
+        }).ToList();
+    }
 }

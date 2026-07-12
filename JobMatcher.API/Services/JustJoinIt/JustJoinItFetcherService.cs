@@ -98,6 +98,7 @@ public class JustJoinItFetcherService : IJobFetcherService
                 if (existingGuids.Contains(offer.Guid))
                 {
                     consecutiveKnown++;
+                    offers.Add(offer);
                     if (consecutiveKnown >= ConsecutiveKnownThreshold)
                     {
                         _logger.LogInformation(

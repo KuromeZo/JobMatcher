@@ -16,4 +16,5 @@ public interface IJobRepository
     Task DeleteExpiredOffersAsync(int daysToKeep = 30);
     Task<string?> GetOfferBodyAsync(string guid);
     Task<List<JobOffer>> GetAllOffersAsync();
+    Task<List<JobOffer>> GetOffersByCategoryAsync(List<string> categories, List<string> levels);
 }

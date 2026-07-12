@@ -16,4 +16,6 @@ public class JobOfferEntity
     public string? Body { get; set; }
     public string PublishedAt { get; set; } = "";
     public DateTime FetchedAt { get; set; } = DateTime.UtcNow;
+    public string Category { get; set; } = "";
+    public string ExperienceLevel { get; set; } = "";
 }

@@ -1,4 +1,5 @@
 ﻿using System.Security.Claims;
+using System.Text.Json;
 using JobMatcher.API.Models.Domain;
 using JobMatcher.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -19,6 +20,11 @@ public class OffersController : ControllerBase
         _orchestrator = orchestrator;
         _fetcher = fetcher;
     }
+    
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
     private int GetUserId() =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -46,11 +52,17 @@ public class OffersController : ControllerBase
     }
 
     [HttpPost("score/stream")]
-    public async IAsyncEnumerable<ScoredJob> ScoreOffersStream([FromBody] ScoreRequest request)
+    public async Task ScoreOffersStream([FromBody] ScoreRequest request)
     {
+        Response.ContentType = "application/x-ndjson";
+        Response.Headers["Cache-Control"] = "no-cache";
+        Response.Headers["X-Accel-Buffering"] = "no";
+
         await foreach (var job in _orchestrator.GetScoredJobsStreamAsync(GetUserId(), request))
         {
-            yield return job;
+            var json = JsonSerializer.Serialize(job, JsonOptions);
+            await Response.WriteAsync(json + "\n");
+            await Response.Body.FlushAsync();
         }
     }
 }
