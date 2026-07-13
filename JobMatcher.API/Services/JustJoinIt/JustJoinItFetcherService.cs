@@ -68,82 +68,90 @@ public class JustJoinItFetcherService : IJobFetcherService
     }
 
     private async Task<List<JobOffer>> FetchCategoryAsync(string category, HashSet<string> existingGuids, List<string> levels)
-{
-    var offers = new List<JobOffer>();
-    int offset = 0;
-    int pageCount = 0;
-    const int maxPages = 2;
-    int consecutiveKnown = 0;
-
-    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-
-    do
     {
-        var url = BuildUrl(category, levels, offset);
+        var offers = new List<JobOffer>();
+        int offset = 0;
+        int pageCount = 0;
+        const int maxPages = 2;
+        int consecutiveKnown = 0;
 
-        try
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+        do
         {
-            var response = await _httpClient.GetAsync(url);
-            response.EnsureSuccessStatusCode();
+            var url = BuildUrl(category, levels, offset);
 
-            var json = await response.Content.ReadAsStringAsync();
-            var result = JsonSerializer.Deserialize<JustJoinItResponse>(json, options);
-
-            if (result?.Data == null || result.Data.Count == 0) break;
-
-            bool shouldStop = false;
-
-            foreach (var offer in result.Data)
+            try
             {
-                if (existingGuids.Contains(offer.Guid))
+                var response = await _httpClient.GetAsync(url);
+                response.EnsureSuccessStatusCode();
+
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonSerializer.Deserialize<JustJoinItResponse>(json, options);
+
+                if (result?.Data == null || result.Data.Count == 0) break;
+
+                bool shouldStop = false;
+
+                foreach (var offer in result.Data)
                 {
-                    consecutiveKnown++;
-                    offers.Add(offer);
-                    if (consecutiveKnown >= ConsecutiveKnownThreshold)
+                    // Заполняем Category и ExperienceLevel из параметров запроса,
+                    // т.к. JustJoinIT не всегда возвращает их в листинге
+                    if (offer.Category == null || string.IsNullOrEmpty(offer.Category.Key))
+                        offer.Category = new JobCategory { Key = category };
+
+                    if (string.IsNullOrEmpty(offer.ExperienceLevel))
+                        offer.ExperienceLevel = levels.FirstOrDefault() ?? "";
+
+                    if (existingGuids.Contains(offer.Guid))
                     {
-                        _logger.LogInformation(
-                            "Stopping category {Category} - found {Streak} consecutive known offers",
-                            category, consecutiveKnown);
-                        shouldStop = true;
-                        break;
+                        consecutiveKnown++;
+                        offers.Add(offer);
+                        if (consecutiveKnown >= ConsecutiveKnownThreshold)
+                        {
+                            _logger.LogInformation(
+                                "Stopping category {Category} - found {Streak} consecutive known offers",
+                                category, consecutiveKnown);
+                            shouldStop = true;
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        consecutiveKnown = 0;
+                        offers.Add(offer);
                     }
                 }
-                else
-                {
-                    consecutiveKnown = 0;
-                    offers.Add(offer);
-                }
+
+                if (shouldStop) break;
+
+                offset += result.Data.Count;
+                pageCount++;
+
+                _logger.LogInformation("Category {Category} page {Page}/{Max}, got {Count} offers, offset now: {Offset}",
+                    category, pageCount, maxPages, result.Data.Count, offset);
+
+                await Task.Delay(300);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to fetch category {Category} offset {Offset}",
+                    category, offset);
+                break;
             }
 
-            if (shouldStop) break;
+        } while (pageCount < maxPages);
 
-            offset += result.Data.Count;
-            pageCount++;
+        return offers;
+    }
 
-            _logger.LogInformation("Category {Category} page {Page}/{Max}, got {Count} offers, offset now: {Offset}",
-                category, pageCount, maxPages, result.Data.Count, offset);
+    private static string BuildUrl(string category, List<string> levels, int offset)
+    {
+        var url = $"{BaseUrl}?categories={category}&sortBy=newest&orderBy=descending&itemsCount=10&from={offset}";
 
-            await Task.Delay(300);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to fetch category {Category} offset {Offset}",
-                category, offset);
-            break;
-        }
+        foreach (var level in levels)
+            url += $"&experienceLevels={level}";
 
-    } while (pageCount < maxPages);
-
-    return offers;
-}
-
-private static string BuildUrl(string category, List<string> levels, int offset)
-{
-    var url = $"{BaseUrl}?categories={category}&sortBy=newest&orderBy=descending&itemsCount=10&from={offset}";
-
-    foreach (var level in levels)
-        url += $"&experienceLevels={level}";
-
-    return url;
-}
+        return url;
+    }
 }

@@ -96,7 +96,10 @@ public class JobRepository : IJobRepository
                 EmploymentTypesJson = JsonSerializer.Serialize(o.EmploymentTypes),
                 Body = o.Body,
                 PublishedAt = o.PublishedAt,
-                FetchedAt = DateTime.UtcNow
+                FetchedAt = DateTime.UtcNow,
+                // ← фикс: сохраняем Category и ExperienceLevel
+                Category = o.Category?.Key ?? "",
+                ExperienceLevel = o.ExperienceLevel ?? ""
             })
             .ToList();
 
@@ -156,7 +159,7 @@ public class JobRepository : IJobRepository
             PublishedAt = e.PublishedAt
         }).ToList();
     }
-    
+
     public async Task<List<JobOffer>> GetOffersByCategoryAsync(List<string> categories, List<string> levels)
     {
         var entities = await _db.JobOffers
