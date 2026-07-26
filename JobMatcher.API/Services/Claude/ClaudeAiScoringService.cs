@@ -26,26 +26,32 @@ public class ClaudeAiScoringService : IAiScoringService
 
     public async Task<ScoredJob?> ScoreJobAsync(JobOffer offer, CandidateProfile profile)
     {
-        var profileText = $"Level: {profile.Level}\nDescription: {profile.Description}\nSkills: {string.Join(", ", profile.Skills)}";
         var jobText = StripHtml(offer.Body ?? "");
+        var candidateSkills = string.Join(", ", profile.Skills);
+        var requiredSkills = string.Join(", ", offer.RequiredSkills.Select(s => s.Name));
 
         var jsonTemplate = "{\"score\": <1-10>, \"matches\": [], \"to_learn\": [], \"verdict\": \"\"}";
 
         var prompt = $"""
-                      You are a job match evaluator for a junior developer.
+                      You are a job match evaluator.
 
-                      Candidate profile:
-                      {profileText}
+                      CANDIDATE SKILLS: {candidateSkills}
 
-                      Job offer: {offer.Title} at {offer.CompanyName}
-                      Required skills: {string.Join(", ", offer.RequiredSkills.Select(s => s.Name))}
+                      JOB: {offer.Title} at {offer.CompanyName}
+                      REQUIRED SKILLS: {requiredSkills}
+                      JOB DESCRIPTION: {jobText}
 
-                      Job description:
-                      {jobText}
+                      STEP 1: List every technology/skill in REQUIRED SKILLS and JOB DESCRIPTION.
+                      STEP 2: For each item from STEP 1, check if it exists in CANDIDATE SKILLS.
+                      STEP 3: Items NOT found in CANDIDATE SKILLS go into to_learn.
+                      STEP 4: Items FOUND in CANDIDATE SKILLS go into matches.
 
-                      Evaluate this job for the candidate. Return ONLY valid JSON, no markdown, no explanation.
+                      Return ONLY valid JSON, no markdown, no explanation.
                       Format: {jsonTemplate}
-                      Where score is 1-10, matches is array of matching skills, to_learn is array of gaps, verdict is one sentence.
+                      - score: 1-10 based on how many required skills candidate has
+                      - matches: skills from STEP 4
+                      - to_learn: skills from STEP 3 (specific technology names like "React", "Azure", "AWS", "WordPress", "Kafka" — NOT generic phrases)
+                      - verdict: one sentence
                       """;
 
         var requestBody = new
