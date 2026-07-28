@@ -3,12 +3,13 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ScoreResponse, ScoredJob } from '../models/job.models';
 import { AuthService } from './auth';
+import { environment } from '../../environments/environment';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private http = inject(HttpClient);
   private auth = inject(AuthService);
-  private readonly baseUrl = '/api/offers';
+  private readonly baseUrl = `${environment.apiUrl}/api/offers`;
 
   getScoredJobs(): Observable<ScoreResponse> {
     return this.http.get<ScoreResponse>(`${this.baseUrl}/score`);
