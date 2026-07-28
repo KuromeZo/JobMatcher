@@ -14,16 +14,21 @@ export class ApiService {
     return this.http.get<ScoreResponse>(`${this.baseUrl}/score`);
   }
 
-  async *streamScoredJobs(categories: string[], experienceLevels: string[], minScore: number): AsyncGenerator<ScoredJob> {
+  async *streamScoredJobs(
+    categories: string[],
+    experienceLevels: string[],
+    minScore: number,
+    forceRescore: boolean = false
+  ): AsyncGenerator<ScoredJob> {
     const token = this.auth.getToken();
 
-    const savedProfile = localStorage.getItem('candidate_profile');
+    const savedProfile = localStorage.getItem(this.auth.getProfileStorageKey());
     const profile = savedProfile ? JSON.parse(savedProfile) : null;
 
     const body: any = {
       filters: { categories, experienceLevels },
       minScore: minScore,
-      forceRescore: false,
+      forceRescore: forceRescore,
     };
 
     if (profile) {
@@ -59,7 +64,7 @@ export class ApiService {
         try {
           yield JSON.parse(trimmed) as ScoredJob;
         } catch {
-          console.warn('Не удалось распарсить строку:', trimmed);
+          console.warn('Could not parse line:', trimmed);
         }
       }
     }
