@@ -22,7 +22,9 @@ Results stream in as they're scored, so you see matches appear one by one instea
 
 ## Screenshots
 
-> _Add screenshots here — e.g. `docs/dashboard.png` and `docs/profile.png`_
+![Dashboard](docs/dashboard.png)
+
+![Profile](docs/profile.png)
 
 ---
 
