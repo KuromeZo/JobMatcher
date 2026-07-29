@@ -1,0 +1,107 @@
+<div class="profile-page">
+
+  <div class="profile-page__header">
+    <h1>Candidate Profile</h1>
+    <p class="subtitle">Upload your CV so AI can fill in the profile automatically</p>
+  </div>
+
+  <div class="profile-layout">
+
+    <p-card styleClass="upload-card">
+      <ng-template pTemplate="header">
+        <div class="card-header">
+          <i class="pi pi-upload"></i>
+          <div>
+            <div class="card-title">Upload CV</div>
+            <div class="card-subtitle">.docx format</div>
+          </div>
+        </div>
+      </ng-template>
+
+      <div
+        class="drop-zone"
+        (drop)="onDrop($event)"
+        (dragover)="onDragOver($event)"
+        (click)="fileInput.click()"
+      >
+        @if (uploading()) {
+          <p-progressSpinner styleClass="spinner-sm" strokeWidth="4" />
+          <p>Analyzing CV…</p>
+        } @else {
+          <i class="pi pi-file drop-icon"></i>
+          <p>Drag a file here or <span class="link">click to select</span></p>
+          <p class="hint">.docx supported</p>
+        }
+      </div>
+
+      <input #fileInput type="file" accept=".docx" hidden (change)="onFileSelected($event)">
+
+      @if (uploadError()) {
+        <p class="error">
+          <i class="pi pi-exclamation-circle"></i>
+          {{ uploadError() }}
+        </p>
+      }
+
+      @if (profileReady()) {
+        <p class="success">
+          <i class="pi pi-check-circle"></i>
+          Profile successfully loaded from CV!
+        </p>
+      }
+    </p-card>
+
+    <p-card styleClass="form-card">
+      <ng-template pTemplate="header">
+        <div class="card-header">
+          <i class="pi pi-user"></i>
+          <div>
+            <div class="card-title">Profile Data</div>
+            <div class="card-subtitle">Can be edited manually</div>
+          </div>
+        </div>
+      </ng-template>
+
+      <form [formGroup]="form">
+
+        <div class="field">
+          <label for="level">Level</label>
+          <p-select formControlName="level" [options]="levelOptions" optionLabel="label" optionValue="value" inputId="level" styleClass="full-width" />
+        </div>
+
+        <div class="field">
+          <label for="description">About</label>
+          <textarea pTextarea formControlName="description" id="description" rows="3" placeholder="Briefly about yourself and your goals" class="full-width"></textarea>
+        </div>
+
+        <p-divider />
+
+        <div class="skills-section">
+          <div class="skills-header">
+            <span class="skills-title">Skills</span>
+            <p-button label="Add" icon="pi pi-plus" [outlined]="true" (onClick)="addSkill()" type="button" />
+          </div>
+
+          <div class="skills-list">
+            @for (ctrl of skillControls; track $index) {
+              <div class="skill-row">
+                <input pInputText [formControl]="$any(ctrl)" placeholder="e.g. ASP.NET Core" class="skill-input">
+                <p-button icon="pi pi-times" [text]="true" severity="danger" (onClick)="removeSkill($index)" type="button" />
+              </div>
+            }
+
+            @if (skillControls.length === 0) {
+              <p class="no-skills">No skills added yet. Upload a CV or add manually.</p>
+            }
+          </div>
+        </div>
+
+      </form>
+
+      <ng-template pTemplate="footer">
+        <p-button label="Save Profile" icon="pi pi-save" (onClick)="saveToStorage()" [disabled]="form.invalid" />
+      </ng-template>
+    </p-card>
+
+  </div>
+</div>

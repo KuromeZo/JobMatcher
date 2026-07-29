@@ -1,0 +1,96 @@
+<div class="dashboard">
+
+  <div class="dashboard__hero">
+    <h1>Find a job that fits you</h1>
+    <p class="subtitle">Jobs scored by AI based on your profile</p>
+  </div>
+
+  <div class="filters">
+    <div class="filters__row">
+
+      <div class="filters__group">
+        <span class="filters__label">Categories</span>
+        <div class="filters__chips">
+          @for (cat of allCategories; track cat.value) {
+            <button
+              class="chip"
+              [class.chip--active]="isCategorySelected(cat.value)"
+              (click)="toggleCategory(cat.value)"
+            >
+              {{ cat.label }}
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="filters__group">
+        <span class="filters__label">Level</span>
+        <div class="filters__chips">
+          @for (lvl of allLevels; track lvl.value) {
+            <button
+              class="chip"
+              [class.chip--active]="isLevelSelected(lvl.value)"
+              (click)="toggleLevel(lvl.value)"
+            >
+              {{ lvl.label }}
+            </button>
+          }
+        </div>
+      </div>
+
+    </div>
+
+    <div class="filters__row filters__row--bottom">
+      <div class="filters__left">
+        <span class="filters__label">Min. score: <strong>{{ minScore() }}</strong></span>
+        <p-slider [(ngModel)]="minScore" [min]="1" [max]="10" [step]="1" styleClass="score-slider" />
+      </div>
+
+      <div class="checkbox-wrapper">
+        <p-checkbox [(ngModel)]="remoteOnly" [binary]="true" inputId="remoteOnly" />
+        <label for="remoteOnly">Remote only</label>
+      </div>
+
+      <p-button label="Find jobs" icon="pi pi-search" (onClick)="loadJobs()" [disabled]="loading()" />
+
+      @if (hasSearched()) {
+        <p-button label="Rescore" icon="pi pi-refresh" [outlined]="true" (onClick)="rescoreJobs()" [disabled]="loading()" />
+      }
+
+      @if (hasSearched()) {
+        <span class="filters__count">
+          Found: {{ filteredJobs().length }} of {{ jobs().length }}
+        </span>
+      }
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="state">
+      <p-progressSpinner styleClass="spinner-sm" strokeWidth="4" />
+      <p>Scoring jobs… {{ loadedCount() > 0 ? 'found ' + loadedCount() : '' }}</p>
+    </div>
+  } @else if (error()) {
+    <div class="state state--error">
+      <i class="pi pi-exclamation-circle"></i>
+      <p>{{ error() }}</p>
+    </div>
+  } @else if (!hasSearched()) {
+    <div class="state">
+      <i class="pi pi-search"></i>
+      <p>Choose categories and click "Find jobs"</p>
+    </div>
+  } @else if (filteredJobs().length === 0) {
+    <div class="state">
+      <i class="pi pi-inbox"></i>
+      <p>No matching jobs found.</p>
+    </div>
+  } @else {
+    <div class="grid">
+      @for (job of filteredJobs(); track job.offer.guid) {
+        <app-job-card [job]="job" />
+      }
+    </div>
+  }
+
+</div>

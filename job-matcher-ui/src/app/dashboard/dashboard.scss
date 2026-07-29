@@ -1,0 +1,141 @@
+.dashboard {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.dashboard__hero {
+  text-align: center;
+  margin-bottom: 2rem;
+
+  h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--p-primary-color);
+    margin: 0 0 0.5rem;
+  }
+
+  .subtitle {
+    color: var(--p-text-muted-color);
+    font-size: 1.05rem;
+    margin: 0;
+  }
+}
+
+.filters {
+  background: var(--p-content-background);
+  border: 1px solid var(--p-content-border-color);
+  border-radius: var(--p-content-border-radius);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.filters__row {
+  display: flex;
+  gap: 2.5rem;
+  flex-wrap: wrap;
+
+  &--bottom {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--p-content-border-color);
+    align-items: center;
+    gap: 1.5rem;
+  }
+}
+
+.filters__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.filters__label {
+  font-size: 0.85rem;
+  color: var(--p-text-muted-color);
+}
+
+.filters__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chip {
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--p-content-border-color);
+  background: transparent;
+  color: var(--p-text-color);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    border-color: var(--p-primary-color);
+  }
+
+  &--active {
+    background: var(--p-primary-color);
+    border-color: var(--p-primary-color);
+    color: var(--p-primary-contrast-color);
+  }
+}
+
+.filters__left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 220px;
+
+  ::ng-deep .score-slider {
+    width: 140px;
+  }
+}
+
+.checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  label {
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+}
+
+.filters__count {
+  color: var(--p-text-muted-color);
+  font-size: 0.9rem;
+  margin-left: auto;
+}
+
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 4rem 1rem;
+  color: var(--p-text-muted-color);
+  text-align: center;
+
+  i {
+    font-size: 2.5rem;
+  }
+
+  p {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  &--error {
+    color: var(--p-red-400);
+  }
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1.5rem;
+}

@@ -1,0 +1,50 @@
+<p-card styleClass="job-card">
+  <ng-template pTemplate="header">
+    <div class="job-card__header">
+      <div class="score-badge">
+        <p-tag [severity]="scoreSeverity" [value]="job().score + '/10'" [rounded]="true" />
+      </div>
+      <div class="job-info">
+        <h3 class="job-title">{{ job().offer.title }}</h3>
+        <p class="job-meta">
+          <i class="pi pi-building"></i> {{ job().offer.companyName }}
+          <i class="pi pi-map-marker"></i> {{ job().offer.city || 'Remote' }}
+        </p>
+      </div>
+    </div>
+  </ng-template>
+
+  <p class="verdict">{{ job().verdict }}</p>
+
+  @if (job().matches.length > 0) {
+    <div class="section">
+      <span class="section__label">
+        <i class="pi pi-check-circle"></i> Matches
+      </span>
+      <div class="tag-list">
+        @for (m of job().matches; track m) {
+          <p-tag [value]="m" severity="success" [rounded]="true" styleClass="chip--match" />
+        }
+      </div>
+    </div>
+  }
+
+  @if (job().toLearn.length > 0) {
+    <div class="section">
+      <span class="section__label">
+        <i class="pi pi-graduation-cap"></i> To Learn
+      </span>
+      <div class="tag-list">
+        @for (t of job().toLearn; track t) {
+          <p-tag [value]="t" severity="warn" [rounded]="true" styleClass="chip--learn" />
+        }
+      </div>
+    </div>
+  }
+
+  <ng-template pTemplate="footer">
+    <a [href]="'https://justjoin.it/offers/' + job().offer.slug" target="_blank" rel="noopener">
+      <p-button label="View on JustJoinIT" icon="pi pi-external-link" [outlined]="true" />
+    </a>
+  </ng-template>
+</p-card>

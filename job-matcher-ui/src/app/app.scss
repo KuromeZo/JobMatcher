@@ -1,0 +1,52 @@
+::ng-deep .navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: #1a1a2e !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--p-primary-color);
+
+    i {
+      color: var(--p-primary-color);
+    }
+  }
+
+  a {
+    text-decoration: none;
+
+    .p-button {
+      color: var(--muted);
+      font-size: 0.95rem;
+      font-weight: 500;
+      padding: 0.5rem 0.9rem;
+    }
+
+    &.nav-active .p-button {
+      color: var(--p-primary-color);
+    }
+  }
+
+  .logout-btn {
+    color: var(--muted);
+    font-size: 0.95rem;
+    font-weight: 500;
+    padding: 0.5rem 0.9rem;
+
+    &:hover {
+      color: var(--p-red-400);
+    }
+  }
+}
+
+.content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}

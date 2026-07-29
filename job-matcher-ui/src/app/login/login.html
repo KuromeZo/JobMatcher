@@ -1,0 +1,56 @@
+<div class="login-page">
+  <p-card styleClass="login-card">
+    <div class="login-logo">
+      <i class="pi pi-briefcase"></i>
+      <span>Job Matcher</span>
+    </div>
+
+    <p-tabs value="0">
+      <p-tablist>
+        <p-tab value="0">Log In</p-tab>
+        <p-tab value="1">Register</p-tab>
+      </p-tablist>
+      <p-tabpanels>
+        <p-tabpanel value="0">
+          <div class="form">
+            <div class="field">
+              <label for="login-input">Username</label>
+              <input pInputText id="login-input" [value]="login()" (input)="login.set($any($event.target).value)" autocomplete="username" />
+            </div>
+
+            <div class="field">
+              <label for="password-input">Password</label>
+              <p-password [(ngModel)]="password" [feedback]="false" [toggleMask]="true" inputId="password-input" autocomplete="current-password" />
+            </div>
+
+            @if (error()) {
+              <p class="error">{{ error() }}</p>
+            }
+
+            <p-button label="Log In" (onClick)="submit(false)" [disabled]="loading()" [loading]="loading()" styleClass="w-full" />
+          </div>
+        </p-tabpanel>
+
+        <p-tabpanel value="1">
+          <div class="form">
+            <div class="field">
+              <label for="reg-login-input">Username</label>
+              <input pInputText id="reg-login-input" [value]="login()" (input)="login.set($any($event.target).value)" autocomplete="username" />
+            </div>
+
+            <div class="field">
+              <label for="reg-password-input">Password</label>
+              <p-password [(ngModel)]="password" [feedback]="false" [toggleMask]="true" inputId="reg-password-input" autocomplete="new-password" />
+            </div>
+
+            @if (error()) {
+              <p class="error">{{ error() }}</p>
+            }
+
+            <p-button label="Register" (onClick)="submit(true)" [disabled]="loading()" [loading]="loading()" styleClass="w-full" />
+          </div>
+        </p-tabpanel>
+      </p-tabpanels>
+    </p-tabs>
+  </p-card>
+</div>

@@ -1,0 +1,26 @@
+html {
+  height: 100%;
+}
+
+body {
+  color-scheme: dark;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'Roboto', sans-serif;
+  margin: 0;
+  height: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #0f1115;
+  --surface: #1a1d24;
+  --text: #e6e8eb;
+  --muted: #9aa0a6;
+  --accent: #ce93d8;
+  --good: #1d9e75;
+  --warn: #f4a261;
+}

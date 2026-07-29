@@ -1,0 +1,24 @@
+<p-toolbar styleClass="navbar">
+  <div class="p-toolbar-group-start">
+    <span class="logo">
+      <i class="pi pi-briefcase"></i>
+      Job Matcher
+    </span>
+  </div>
+
+  @if (auth.isLoggedIn()) {
+    <div class="p-toolbar-group-end">
+      <a routerLink="/" routerLinkActive="nav-active" [routerLinkActiveOptions]="{ exact: true }">
+        <p-button label="Jobs" [text]="true" />
+      </a>
+      <a routerLink="/profile" routerLinkActive="nav-active">
+        <p-button label="Profile" [text]="true" />
+      </a>
+      <p-button label="Log out" [text]="true" (onClick)="auth.logout()" styleClass="logout-btn" />
+    </div>
+  }
+</p-toolbar>
+
+<main class="content">
+  <router-outlet />
+</main>
