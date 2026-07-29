@@ -22,7 +22,11 @@ Results stream in as they're scored, so you see matches appear one by one instea
 
 ## Screenshots
 
+**Dashboard** — filters, AI-scored jobs, and skill gaps
+
 ![Dashboard](docs/dashboard.png)
+
+**Profile** — CV upload and parsed skill list
 
 ![Profile](docs/profile.png)
 
