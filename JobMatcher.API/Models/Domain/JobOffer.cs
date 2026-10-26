@@ -1,4 +1,4 @@
-﻿namespace JobMatcher.API.Models.Domain;
+namespace JobMatcher.API.Models.Domain;
 
 public class JobOffer
 {
@@ -14,6 +14,9 @@ public class JobOffer
     public List<RequiredSkill> NiceToHaveSkills { get; set; } = [];
     public List<EmploymentType> EmploymentTypes { get; set; } = [];
     public string PublishedAt { get; set; } = "";
+
+    // When the job board takes the offer down; null for offers stored before this was tracked
+    public DateTime? ExpiredAt { get; set; }
     public string? Body { get; set; }
 }
 

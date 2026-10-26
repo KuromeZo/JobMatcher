@@ -8,7 +8,8 @@ namespace JobMatcher.API.Services;
 
 public class JobScoringOrchestrator : IJobScoringOrchestrator
 {
-    private const int OfferRetentionDays = 30;
+    // Only for offers stored before expiry dates were tracked
+    private const int FallbackOfferRetentionDays = 30;
     private const int MaxParallelScoring = 4;
     private static readonly TimeSpan JobBoardRequestDelay = TimeSpan.FromMilliseconds(300);
 
@@ -32,7 +33,7 @@ public class JobScoringOrchestrator : IJobScoringOrchestrator
     public async IAsyncEnumerable<ScoredJob> StreamScoredJobsAsync(
         int userId, ScoreRequest request, [EnumeratorCancellation] CancellationToken ct)
     {
-        await _repository.DeleteExpiredOffersAsync(OfferRetentionDays, ct);
+        await _repository.DeleteExpiredOffersAsync(FallbackOfferRetentionDays, ct);
 
         var knownGuids = await _repository.GetExistingGuidsAsync(ct);
         var offers = await CollectOffersAsync(request.Filters, knownGuids, ct);
@@ -101,6 +102,9 @@ public class JobScoringOrchestrator : IJobScoringOrchestrator
     {
         var offers = await _fetcher.FetchOffersMetadataAsync(knownGuids, filters, ct);
         var fetchedGuids = offers.Select(o => o.Guid).ToHashSet();
+
+        // The listing carries the current expiry date, which moves when an employer extends the offer
+        await _repository.UpdateExpiryAsync(offers.Where(o => knownGuids.Contains(o.Guid)).ToList(), ct);
 
         var stored = await _repository.GetOffersByCategoryAsync(filters.Categories, filters.ExperienceLevels, ct);
         offers.AddRange(stored.Where(o => !fetchedGuids.Contains(o.Guid)));

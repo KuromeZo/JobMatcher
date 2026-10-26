@@ -31,6 +31,9 @@ public class AppDbContext : DbContext
             .HasIndex(o => o.FetchedAt);
 
         modelBuilder.Entity<JobOfferEntity>()
+            .HasIndex(o => o.ExpiredAt);
+
+        modelBuilder.Entity<JobOfferEntity>()
             .HasIndex(o => new { o.Category, o.ExperienceLevel });
     }
 }

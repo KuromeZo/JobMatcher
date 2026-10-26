@@ -15,9 +15,18 @@ public interface IJobRepository
     // Job offers
     Task<HashSet<string>> GetExistingGuidsAsync(CancellationToken ct);
     Task SaveOfferAsync(JobOffer offer, CancellationToken ct);
-    Task DeleteExpiredOffersAsync(int daysToKeep, CancellationToken ct);
+
+    /// <summary>Refreshes the expiry date of stored offers, e.g. after the employer extended the listing.</summary>
+    Task UpdateExpiryAsync(IReadOnlyCollection<JobOffer> offers, CancellationToken ct);
+
+    /// <summary>
+    /// Deletes offers past their expiry date, and their scores. Offers stored without an expiry date
+    /// are deleted <paramref name="fallbackDaysToKeep"/> days after they were fetched.
+    /// </summary>
+    Task DeleteExpiredOffersAsync(int fallbackDaysToKeep, CancellationToken ct);
+
     Task<Dictionary<string, string?>> GetOfferBodiesAsync(IReadOnlyCollection<string> guids, CancellationToken ct);
 
-    /// <summary>Offers matching the filters, without bodies.</summary>
+    /// <summary>Not expired offers matching the filters, without bodies.</summary>
     Task<List<JobOffer>> GetOffersByCategoryAsync(List<string> categories, List<string> levels, CancellationToken ct);
 }

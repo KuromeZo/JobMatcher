@@ -79,10 +79,33 @@ public class JobRepository : IJobRepository
         await _db.SaveChangesAsync(ct);
     }
 
-    public async Task DeleteExpiredOffersAsync(int daysToKeep, CancellationToken ct)
+    public async Task UpdateExpiryAsync(IReadOnlyCollection<JobOffer> offers, CancellationToken ct)
     {
-        var cutoff = DateTime.UtcNow.AddDays(-daysToKeep);
-        var expired = _db.JobOffers.Where(o => o.FetchedAt < cutoff);
+        var expiryByGuid = offers
+            .Where(o => o.ExpiredAt != null)
+            .DistinctBy(o => o.Guid)
+            .ToDictionary(o => o.Guid, o => o.ExpiredAt);
+
+        if (expiryByGuid.Count == 0) return;
+
+        var guids = expiryByGuid.Keys.ToList();
+        var entities = await _db.JobOffers
+            .Where(o => guids.Contains(o.Guid))
+            .ToListAsync(ct);
+
+        foreach (var entity in entities)
+            entity.ExpiredAt = expiryByGuid[entity.Guid];
+
+        // Only rows whose date actually changed are written
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task DeleteExpiredOffersAsync(int fallbackDaysToKeep, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+        var fallbackCutoff = now.AddDays(-fallbackDaysToKeep);
+        var expired = _db.JobOffers.Where(o =>
+            o.ExpiredAt < now || (o.ExpiredAt == null && o.FetchedAt < fallbackCutoff));
         var expiredGuids = expired.Select(o => o.Guid);
 
         // Set-based deletes: nothing is loaded into memory
@@ -108,9 +131,11 @@ public class JobRepository : IJobRepository
     public async Task<List<JobOffer>> GetOffersByCategoryAsync(
         List<string> categories, List<string> levels, CancellationToken ct)
     {
+        var now = DateTime.UtcNow;
         var entities = await _db.JobOffers
             .AsNoTracking()
             .Where(o => categories.Contains(o.Category) && levels.Contains(o.ExperienceLevel))
+            .Where(o => o.ExpiredAt == null || o.ExpiredAt > now)
             .Select(o => new JobOfferEntity
             {
                 Guid = o.Guid,
@@ -123,6 +148,7 @@ public class JobRepository : IJobRepository
                 EmploymentTypesJson = o.EmploymentTypesJson,
                 PublishedAt = o.PublishedAt,
                 FetchedAt = o.FetchedAt,
+                ExpiredAt = o.ExpiredAt,
                 Category = o.Category,
                 ExperienceLevel = o.ExperienceLevel
                 // Body is skipped on purpose: it is large and only needed for scoring
@@ -147,6 +173,7 @@ public class JobRepository : IJobRepository
         Body = offer.Body,
         PublishedAt = offer.PublishedAt,
         FetchedAt = DateTime.UtcNow,
+        ExpiredAt = offer.ExpiredAt,
         Category = offer.Category?.Key ?? "",
         ExperienceLevel = offer.ExperienceLevel
     };
@@ -163,6 +190,7 @@ public class JobRepository : IJobRepository
         EmploymentTypes = JsonSerializer.Deserialize<List<EmploymentType>>(entity.EmploymentTypesJson) ?? [],
         Body = entity.Body,
         PublishedAt = entity.PublishedAt,
+        ExpiredAt = entity.ExpiredAt,
         Category = new JobCategory { Key = entity.Category },
         ExperienceLevel = entity.ExperienceLevel
     };

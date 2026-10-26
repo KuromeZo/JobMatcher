@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace JobMatcher.API.Models.Persistence;
 
@@ -16,6 +16,7 @@ public class JobOfferEntity
     public string? Body { get; set; }
     public string PublishedAt { get; set; } = "";
     public DateTime FetchedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? ExpiredAt { get; set; }
     public string Category { get; set; } = "";
     public string ExperienceLevel { get; set; } = "";
 }
