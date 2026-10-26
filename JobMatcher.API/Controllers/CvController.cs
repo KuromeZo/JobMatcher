@@ -1,4 +1,4 @@
-﻿using JobMatcher.API.Services;
+using JobMatcher.API.Services;
 using JobMatcher.API.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
@@ -25,7 +25,7 @@ public class CvController : ControllerBase
     }
 
     [HttpPost("upload")]
-    public async Task<IActionResult> UploadCv(IFormFile file)
+    public async Task<IActionResult> UploadCv(IFormFile file, CancellationToken ct)
     {
         if (file == null || file.Length == 0)
             return BadRequest("No file uploaded");
@@ -43,7 +43,7 @@ public class CvController : ControllerBase
 
         _logger.LogInformation("Extracted {Length} characters from CV", text.Length);
 
-        var profile = await _parser.ParseCvAsync(text);
+        var profile = await _parser.ParseCvAsync(text, ct);
 
         return Ok(profile);
     }

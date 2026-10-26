@@ -1,4 +1,4 @@
-﻿using JobMatcher.API.Models.Domain;
+using JobMatcher.API.Models.Domain;
 using JobMatcher.API.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -16,7 +16,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Login) || string.IsNullOrWhiteSpace(request.Password))
             return BadRequest("Login and password are required");
@@ -24,7 +24,7 @@ public class AuthController : ControllerBase
         if (request.Password.Length < 6)
             return BadRequest("Password must be at least 6 characters");
 
-        var result = await _authService.RegisterAsync(request);
+        var result = await _authService.RegisterAsync(request, ct);
         if (result == null)
             return Conflict("Login already exists");
 
@@ -32,12 +32,12 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginRequest request)
+    public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Login) || string.IsNullOrWhiteSpace(request.Password))
             return BadRequest("Login and password are required");
 
-        var result = await _authService.LoginAsync(request);
+        var result = await _authService.LoginAsync(request, ct);
         if (result == null)
             return Unauthorized("Invalid login or password");
 

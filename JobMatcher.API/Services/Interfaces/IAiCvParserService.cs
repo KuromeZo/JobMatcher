@@ -4,5 +4,5 @@ namespace JobMatcher.API.Services.Interfaces;
 
 public interface IAiCvParserService
 {
-    Task<CandidateProfile> ParseCvAsync(string cvText);
+    Task<CandidateProfile> ParseCvAsync(string cvText, CancellationToken ct);
 }

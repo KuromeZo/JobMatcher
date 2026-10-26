@@ -1,4 +1,6 @@
-﻿using JobMatcher.API.Models.Domain;
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
+using JobMatcher.API.Models.Domain;
 using JobMatcher.API.Repositories.Interfaces;
 using JobMatcher.API.Services.Interfaces;
 
@@ -6,195 +8,168 @@ namespace JobMatcher.API.Services;
 
 public class JobScoringOrchestrator : IJobScoringOrchestrator
 {
+    private const int OfferRetentionDays = 30;
+    private const int MaxParallelScoring = 4;
+    private static readonly TimeSpan JobBoardRequestDelay = TimeSpan.FromMilliseconds(300);
+
     private readonly IJobFetcherService _fetcher;
     private readonly IAiScoringService _scorer;
     private readonly IJobRepository _repository;
-    private readonly IConfiguration _config;
     private readonly ILogger<JobScoringOrchestrator> _logger;
 
     public JobScoringOrchestrator(
         IJobFetcherService fetcher,
         IAiScoringService scorer,
         IJobRepository repository,
-        IConfiguration config,
         ILogger<JobScoringOrchestrator> logger)
     {
         _fetcher = fetcher;
         _scorer = scorer;
         _repository = repository;
-        _config = config;
         _logger = logger;
     }
 
-    public async Task<List<ScoredJob>> GetScoredJobsAsync(int userId, ScoreRequest? request = null)
+    public async IAsyncEnumerable<ScoredJob> StreamScoredJobsAsync(
+        int userId, ScoreRequest request, [EnumeratorCancellation] CancellationToken ct)
     {
-        var profile = request?.Profile ?? BuildProfile();
-        var filters = request?.Filters ?? new JobSearchFilters();
-        var minScore = request?.MinScore ?? 6;
+        await _repository.DeleteExpiredOffersAsync(OfferRetentionDays, ct);
 
-        // Если пользователь сменил профиль — сбрасываем его оценки
-        if (request?.ForceRescore == true)
-        {
-            _logger.LogInformation("ForceRescore — clearing scores for user {UserId}", userId);
-            await _repository.ClearScoresAsync(userId);
-        }
+        var knownGuids = await _repository.GetExistingGuidsAsync(ct);
+        var offers = await CollectOffersAsync(request.Filters, knownGuids, ct);
 
-        // 1. Удаляем просроченные офферы
-        await _repository.DeleteExpiredOffersAsync();
+        var cachedScores = request.ForceRescore
+            ? new Dictionary<string, ScoredJob>()
+            : await _repository.GetCachedScoresAsync(userId, offers.Select(o => o.Guid).ToList(), ct);
 
-        // 2. Получаем существующие guids из БД
-        var existingGuids = await _repository.GetExistingGuidAsync();
-
-        // 3. Фетчим метаданные с JustJoinIT — останавливаемся при стрике из 5 известных
-        var fetchedOffers = await _fetcher.FetchOffersMetadataAsync(existingGuids, filters);
-
-        // 4. Фетчим body только для новых офферов
-        var newOffers = fetchedOffers
-            .Where(o => !existingGuids.Contains(o.Guid))
-            .ToList();
-
-        _logger.LogInformation("Found {New} new offers out of {Total} fetched",
-            newOffers.Count, fetchedOffers.Count);
-
-        foreach (var offer in newOffers)
-        {
-            offer.Body = await _fetcher.FetchOfferBodyAsync(offer.Slug);
-            await Task.Delay(300);
-        }
-
-        await _repository.SaveOffersAsync(newOffers);
-
-        // 5. Скорим все офферы — новые через Claude, старые из кеша
-        var allOffersForScoring = fetchedOffers.Count > 0
-            ? fetchedOffers
-            : await _repository.GetAllOffersAsync();
-
-        var scoredJobs = new List<ScoredJob>();
-
-        foreach (var offer in allOffersForScoring)
-        {
-            var cached = await _repository.GetCachedScoreAsync(offer.Guid, userId);
-            if (cached != null)
+        // 1. Cached scores cost nothing, so they go out right away
+        var cachedResults = offers
+            .Where(o => cachedScores.ContainsKey(o.Guid))
+            .Select(o =>
             {
-                offer.Body = await _repository.GetOfferBodyAsync(offer.Guid);
-                cached.Offer = offer;
-                if (cached.Score >= minScore)
-                    scoredJobs.Add(cached);
-                continue;
-            }
+                var cached = cachedScores[o.Guid];
+                cached.Offer = o;
+                return cached;
+            })
+            .Where(s => s.Score >= request.MinScore)
+            .OrderByDescending(s => s.Score);
 
-            var scored = await _scorer.ScoreJobAsync(offer, profile);
-            if (scored != null)
-            {
-                await _repository.SaveScoreAsync(offer.Guid, scored, userId);
-                if (scored.Score >= minScore)
-                    scoredJobs.Add(scored);
-            }
+        foreach (var cached in cachedResults)
+            yield return cached;
+
+        // 2. Everything else is scored by the AI
+        var toScore = offers.Where(o => !cachedScores.ContainsKey(o.Guid)).ToList();
+
+        _logger.LogInformation(
+            "User {UserId}: {Total} offers, {Cached} cached, {ToScore} to score ({New} new)",
+            userId, offers.Count, cachedScores.Count, toScore.Count,
+            toScore.Count(o => !knownGuids.Contains(o.Guid)));
+
+        if (toScore.Count == 0) yield break;
+
+        // Known offers already have a body in the DB; new ones are fetched from the job board while scoring
+        var storedBodies = await _repository.GetOfferBodiesAsync(
+            toScore.Where(o => knownGuids.Contains(o.Guid)).Select(o => o.Guid).ToList(), ct);
+
+        foreach (var offer in toScore)
+        {
+            if (storedBodies.TryGetValue(offer.Guid, out var body))
+                offer.Body = body;
         }
 
-        return scoredJobs
-            .OrderByDescending(s => s.Score)
-            .ToList();
+        await foreach (var (offer, scored) in ScoreInParallelAsync(toScore, knownGuids, request.Profile, ct))
+        {
+            // DbContext is not thread-safe, so results are saved here, one at a time.
+            // Saving right away also keeps finished work if the client disconnects mid-stream.
+            if (!knownGuids.Contains(offer.Guid) && offer.Body != null)
+                await _repository.SaveOfferAsync(offer, ct);
+
+            if (scored == null) continue;
+
+            await _repository.SaveScoreAsync(scored, userId, ct);
+
+            // The body is only needed for scoring; no reason to send kilobytes of HTML to the client
+            offer.Body = null;
+
+            if (scored.Score >= request.MinScore)
+                yield return scored;
+        }
     }
 
-    public async IAsyncEnumerable<ScoredJob> GetScoredJobsStreamAsync(int userId, ScoreRequest? request = null)
+    // The job board stops paging on a streak of known offers, so older matching offers come from the DB
+    private async Task<List<JobOffer>> CollectOffersAsync(
+        JobSearchFilters filters, HashSet<string> knownGuids, CancellationToken ct)
     {
-        var profile = request?.Profile ?? BuildProfile();
-        var filters = request?.Filters ?? new JobSearchFilters();
-        var minScore = request?.MinScore ?? 6;
+        var offers = await _fetcher.FetchOffersMetadataAsync(knownGuids, filters, ct);
+        var fetchedGuids = offers.Select(o => o.Guid).ToHashSet();
 
-        // Если пользователь сменил профиль — сбрасываем его оценки
-        if (request?.ForceRescore == true)
+        var stored = await _repository.GetOffersByCategoryAsync(filters.Categories, filters.ExperienceLevels, ct);
+        offers.AddRange(stored.Where(o => !fetchedGuids.Contains(o.Guid)));
+
+        return offers;
+    }
+
+    /// <summary>
+    /// Scores offers with limited parallelism and yields each result as soon as it is ready.
+    /// Workers only call HTTP services; the caller does all DB work.
+    /// </summary>
+    private async IAsyncEnumerable<(JobOffer Offer, ScoredJob? Scored)> ScoreInParallelAsync(
+        List<JobOffer> offers, HashSet<string> knownGuids, CandidateProfile profile,
+        [EnumeratorCancellation] CancellationToken ct)
+    {
+        var channel = Channel.CreateUnbounded<(JobOffer, ScoredJob?)>();
+        using var workersCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        var workers = RunWorkersAsync();
+
+        try
         {
-            _logger.LogInformation("ForceRescore — clearing scores for user {UserId}", userId);
-            await _repository.ClearScoresAsync(userId);
+            await foreach (var result in channel.Reader.ReadAllAsync(ct))
+                yield return result;
+        }
+        finally
+        {
+            // Stops the workers if the consumer stopped early (client disconnected or an error)
+            await workersCts.CancelAsync();
+            await workers;
         }
 
-        // 1. Удаляем просроченные офферы
-        await _repository.DeleteExpiredOffersAsync();
-
-        // 2. Получаем существующие guids из БД
-        var existingGuids = await _repository.GetExistingGuidAsync();
-
-        // 3. Фетчим метаданные с JustJoinIT
-        var fetchedOffers = await _fetcher.FetchOffersMetadataAsync(existingGuids, filters);
-        
-        var fetchedGuids = fetchedOffers.Select(o => o.Guid).ToHashSet();
-        var missedOffers = await _repository.GetOffersByCategoryAsync(
-            filters.Categories, filters.ExperienceLevels);
-        var trulyMissed = missedOffers
-            .Where(o => !fetchedGuids.Contains(o.Guid))
-            .ToList();
-        fetchedOffers.AddRange(trulyMissed);
-
-        var newOffers = fetchedOffers
-            .Where(o => !existingGuids.Contains(o.Guid))
-            .ToList();
-
-        _logger.LogInformation("Found {New} new offers out of {Total} fetched",
-            newOffers.Count, fetchedOffers.Count);
-
-        // 4. Для новых — фетчим body и сразу скорим → yield
-        foreach (var offer in newOffers)
+        async Task RunWorkersAsync()
         {
-            _logger.LogInformation("Fetching body and scoring: {Title}", offer.Title);
-            offer.Body = await _fetcher.FetchOfferBodyAsync(offer.Slug);
-            await Task.Delay(300);
-
-            var scored = await _scorer.ScoreJobAsync(offer, profile);
-            if (scored != null)
+            try
             {
-                await _repository.SaveScoreAsync(offer.Guid, scored, userId);
-                if (scored.Score >= minScore)
-                    yield return scored;
-            }
-        }
-
-        // 5. Для уже известных — берём из кеша и сразу отдаём
-        var cachedOffers = fetchedOffers
-            .Where(o => existingGuids.Contains(o.Guid))
-            .ToList();
-        
-        _logger.LogInformation("fetchedOffers: {F}, cachedOffers: {C}", 
-            fetchedOffers.Count, cachedOffers.Count);
-        
-        _logger.LogInformation("CachedOffers count: {Count}", cachedOffers.Count);
-
-        foreach (var offer in cachedOffers)
-        {
-            var cached = await _repository.GetCachedScoreAsync(offer.Guid, userId);
-            if (cached != null)
-            {
-                offer.Body = await _repository.GetOfferBodyAsync(offer.Guid);
-                cached.Offer = offer;
-                if (cached.Score >= minScore)
-                    yield return cached;
-            }
-            else
-            {
-                // Нет оценки для этого пользователя — оцениваем
-                offer.Body = await _repository.GetOfferBodyAsync(offer.Guid);
-                var scored = await _scorer.ScoreJobAsync(offer, profile);
-                if (scored != null)
+                var options = new ParallelOptions
                 {
-                    await _repository.SaveScoreAsync(offer.Guid, scored, userId);
-                    if (scored.Score >= minScore)
-                        yield return scored;
-                }
+                    MaxDegreeOfParallelism = MaxParallelScoring,
+                    CancellationToken = workersCts.Token
+                };
+
+                await Parallel.ForEachAsync(offers, options, async (offer, token) =>
+                {
+                    var scored = await ScoreOfferAsync(offer, isKnown: knownGuids.Contains(offer.Guid), profile, token);
+                    await channel.Writer.WriteAsync((offer, scored), token);
+                });
+
+                channel.Writer.Complete();
+            }
+            catch (Exception ex)
+            {
+                channel.Writer.Complete(ex);
             }
         }
-
-        // 6. Сохраняем новые офферы в БД
-        await _repository.SaveOffersAsync(newOffers);
     }
 
-    private CandidateProfile BuildProfile()
+    private async Task<ScoredJob?> ScoreOfferAsync(
+        JobOffer offer, bool isKnown, CandidateProfile profile, CancellationToken ct)
     {
-        return new CandidateProfile
+        if (!isKnown)
         {
-            Skills = _config.GetSection("CandidateProfile:Skills").Get<List<string>>() ?? [],
-            Level = _config["CandidateProfile:Level"] ?? "junior",
-            Description = _config["CandidateProfile:Description"] ?? ""
-        };
+            offer.Body = await _fetcher.FetchOfferBodyAsync(offer.Slug, ct);
+            await Task.Delay(JobBoardRequestDelay, ct);
+
+            // Not scored and not saved, so it is retried on the next run
+            if (offer.Body == null) return null;
+        }
+
+        return await _scorer.ScoreJobAsync(offer, profile, ct);
     }
 }

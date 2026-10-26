@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using JobMatcher.API.Data;
 using JobMatcher.API.Models.Domain;
 using JobMatcher.API.Models.Persistence;
@@ -18,72 +18,99 @@ public class JobRepository : IJobRepository
 
     // ─── Scored jobs ───────────────────────────────────────────────────────────
 
-    public async Task<ScoredJob?> GetCachedScoreAsync(string guid, int userId)
+    public async Task<Dictionary<string, ScoredJob>> GetCachedScoresAsync(
+        int userId, IReadOnlyCollection<string> guids, CancellationToken ct)
     {
+        var entities = await _db.ScoredJobs
+            .AsNoTracking()
+            .Where(s => s.UserId == userId && guids.Contains(s.Guid))
+            .ToListAsync(ct);
+
+        return entities
+            .DistinctBy(e => e.Guid)
+            .ToDictionary(e => e.Guid, e => new ScoredJob
+            {
+                Score = e.Score,
+                Matches = JsonSerializer.Deserialize<List<string>>(e.MatchesJson) ?? [],
+                ToLearn = JsonSerializer.Deserialize<List<string>>(e.ToLearnJson) ?? [],
+                Verdict = e.Verdict
+            });
+    }
+
+    public async Task SaveScoreAsync(ScoredJob scored, int userId, CancellationToken ct)
+    {
+        var guid = scored.Offer.Guid;
         var entity = await _db.ScoredJobs
-            .FirstOrDefaultAsync(s => s.Guid == guid && s.UserId == userId);
+            .FirstOrDefaultAsync(s => s.Guid == guid && s.UserId == userId, ct);
 
-        if (entity == null) return null;
-
-        return new ScoredJob
+        if (entity == null)
         {
-            Score = entity.Score,
-            Matches = JsonSerializer.Deserialize<List<string>>(entity.MatchesJson) ?? [],
-            ToLearn = JsonSerializer.Deserialize<List<string>>(entity.ToLearnJson) ?? [],
-            Verdict = entity.Verdict
-        };
-    }
+            entity = new ScoredJobEntity { UserId = userId, Guid = guid };
+            _db.ScoredJobs.Add(entity);
+        }
 
-    public async Task SaveScoreAsync(string guid, ScoredJob scored, int userId)
-    {
-        var existing = await _db.ScoredJobs
-            .FirstOrDefaultAsync(s => s.Guid == guid && s.UserId == userId);
+        entity.Title = scored.Offer.Title;
+        entity.CompanyName = scored.Offer.CompanyName;
+        entity.Score = scored.Score;
+        entity.MatchesJson = JsonSerializer.Serialize(scored.Matches);
+        entity.ToLearnJson = JsonSerializer.Serialize(scored.ToLearn);
+        entity.Verdict = scored.Verdict;
+        entity.CachedAt = DateTime.UtcNow;
 
-        if (existing != null) return;
-
-        _db.ScoredJobs.Add(new ScoredJobEntity
-        {
-            UserId = userId,
-            Guid = guid,
-            Title = scored.Offer.Title,
-            CompanyName = scored.Offer.CompanyName,
-            Score = scored.Score,
-            MatchesJson = JsonSerializer.Serialize(scored.Matches),
-            ToLearnJson = JsonSerializer.Serialize(scored.ToLearn),
-            Verdict = scored.Verdict,
-            CachedAt = DateTime.UtcNow
-        });
-
-        await _db.SaveChangesAsync();
-    }
-
-    public async Task ClearScoresAsync(int userId)
-    {
-        var scores = await _db.ScoredJobs
-            .Where(s => s.UserId == userId)
-            .ToListAsync();
-
-        _db.ScoredJobs.RemoveRange(scores);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(ct);
     }
 
     // ─── Job offers ────────────────────────────────────────────────────────────
 
-    public async Task<HashSet<string>> GetExistingGuidAsync()
+    public async Task<HashSet<string>> GetExistingGuidsAsync(CancellationToken ct)
     {
         var guids = await _db.JobOffers
             .Select(o => o.Guid)
-            .ToListAsync();
+            .ToListAsync(ct);
 
         return [..guids];
     }
 
-    public async Task SaveOffersAsync(IEnumerable<JobOffer> offers)
+    public async Task SaveOfferAsync(JobOffer offer, CancellationToken ct)
     {
-        var existing = await GetExistingGuidAsync();
+        if (await _db.JobOffers.AnyAsync(o => o.Guid == offer.Guid, ct)) return;
 
-        var newOffers = offers
-            .Where(o => !existing.Contains(o.Guid))
+        _db.JobOffers.Add(ToEntity(offer));
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task DeleteExpiredOffersAsync(int daysToKeep, CancellationToken ct)
+    {
+        var cutoff = DateTime.UtcNow.AddDays(-daysToKeep);
+        var expired = _db.JobOffers.Where(o => o.FetchedAt < cutoff);
+        var expiredGuids = expired.Select(o => o.Guid);
+
+        // Set-based deletes: nothing is loaded into memory
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+
+        await _db.ScoredJobs
+            .Where(s => expiredGuids.Contains(s.Guid))
+            .ExecuteDeleteAsync(ct);
+
+        await expired.ExecuteDeleteAsync(ct);
+
+        await transaction.CommitAsync(ct);
+    }
+
+    public async Task<Dictionary<string, string?>> GetOfferBodiesAsync(
+        IReadOnlyCollection<string> guids, CancellationToken ct)
+    {
+        return await _db.JobOffers
+            .Where(o => guids.Contains(o.Guid))
+            .ToDictionaryAsync(o => o.Guid, o => o.Body, ct);
+    }
+
+    public async Task<List<JobOffer>> GetOffersByCategoryAsync(
+        List<string> categories, List<string> levels, CancellationToken ct)
+    {
+        var entities = await _db.JobOffers
+            .AsNoTracking()
+            .Where(o => categories.Contains(o.Category) && levels.Contains(o.ExperienceLevel))
             .Select(o => new JobOfferEntity
             {
                 Guid = o.Guid,
@@ -92,94 +119,51 @@ public class JobRepository : IJobRepository
                 CompanyName = o.CompanyName,
                 City = o.City,
                 WorkplaceType = o.WorkplaceType,
-                RequiredSkillsJson = JsonSerializer.Serialize(o.RequiredSkills),
-                EmploymentTypesJson = JsonSerializer.Serialize(o.EmploymentTypes),
-                Body = o.Body,
+                RequiredSkillsJson = o.RequiredSkillsJson,
+                EmploymentTypesJson = o.EmploymentTypesJson,
                 PublishedAt = o.PublishedAt,
-                FetchedAt = DateTime.UtcNow,
-                // ← фикс: сохраняем Category и ExperienceLevel
-                Category = o.Category?.Key ?? "",
-                ExperienceLevel = o.ExperienceLevel ?? ""
+                FetchedAt = o.FetchedAt,
+                Category = o.Category,
+                ExperienceLevel = o.ExperienceLevel
+                // Body is skipped on purpose: it is large and only needed for scoring
             })
-            .ToList();
+            .ToListAsync(ct);
 
-        if (newOffers.Count == 0) return;
-
-        _db.JobOffers.AddRange(newOffers);
-        await _db.SaveChangesAsync();
+        return entities.Select(ToDomain).ToList();
     }
 
-    public async Task DeleteExpiredOffersAsync(int daysToKeep = 30)
+    // ─── Mapping ───────────────────────────────────────────────────────────────
+
+    private static JobOfferEntity ToEntity(JobOffer offer) => new()
     {
-        var cutoff = DateTime.UtcNow.AddDays(-daysToKeep);
+        Guid = offer.Guid,
+        Slug = offer.Slug,
+        Title = offer.Title,
+        CompanyName = offer.CompanyName,
+        City = offer.City,
+        WorkplaceType = offer.WorkplaceType,
+        RequiredSkillsJson = JsonSerializer.Serialize(offer.RequiredSkills),
+        EmploymentTypesJson = JsonSerializer.Serialize(offer.EmploymentTypes),
+        Body = offer.Body,
+        PublishedAt = offer.PublishedAt,
+        FetchedAt = DateTime.UtcNow,
+        Category = offer.Category?.Key ?? "",
+        ExperienceLevel = offer.ExperienceLevel
+    };
 
-        var expiredGuids = await _db.JobOffers
-            .Where(o => o.FetchedAt < cutoff)
-            .Select(o => o.Guid)
-            .ToListAsync();
-
-        if (expiredGuids.Count == 0) return;
-
-        var expiredScores = await _db.ScoredJobs
-            .Where(s => expiredGuids.Contains(s.Guid))
-            .ToListAsync();
-
-        _db.ScoredJobs.RemoveRange(expiredScores);
-
-        var expiredOffers = await _db.JobOffers
-            .Where(o => expiredGuids.Contains(o.Guid))
-            .ToListAsync();
-
-        _db.JobOffers.RemoveRange(expiredOffers);
-
-        await _db.SaveChangesAsync();
-    }
-
-    public async Task<string?> GetOfferBodyAsync(string guid)
+    private static JobOffer ToDomain(JobOfferEntity entity) => new()
     {
-        var entity = await _db.JobOffers.FindAsync(guid);
-        return entity?.Body;
-    }
-
-    public async Task<List<JobOffer>> GetAllOffersAsync()
-    {
-        var entities = await _db.JobOffers.ToListAsync();
-
-        return entities.Select(e => new JobOffer
-        {
-            Guid = e.Guid,
-            Slug = e.Slug,
-            Title = e.Title,
-            CompanyName = e.CompanyName,
-            City = e.City,
-            WorkplaceType = e.WorkplaceType,
-            RequiredSkills = JsonSerializer.Deserialize<List<RequiredSkill>>(e.RequiredSkillsJson) ?? [],
-            EmploymentTypes = JsonSerializer.Deserialize<List<EmploymentType>>(e.EmploymentTypesJson) ?? [],
-            Body = e.Body,
-            PublishedAt = e.PublishedAt
-        }).ToList();
-    }
-
-    public async Task<List<JobOffer>> GetOffersByCategoryAsync(List<string> categories, List<string> levels)
-    {
-        var entities = await _db.JobOffers
-            .Where(o => categories.Contains(o.Category) && levels.Contains(o.ExperienceLevel))
-            .ToListAsync();
-
-        return entities.Select(e => new JobOffer
-        {
-            Guid = e.Guid,
-            Slug = e.Slug,
-            Title = e.Title,
-            CompanyName = e.CompanyName,
-            City = e.City,
-            WorkplaceType = e.WorkplaceType,
-            RequiredSkills = JsonSerializer.Deserialize<List<RequiredSkill>>(e.RequiredSkillsJson) ?? [],
-            EmploymentTypes = JsonSerializer.Deserialize<List<EmploymentType>>(e.EmploymentTypesJson) ?? [],
-            Body = e.Body,
-            PublishedAt = e.PublishedAt,
-            Category = new JobCategory { Key = e.Category },
-            ExperienceLevel = e.ExperienceLevel
-        }).ToList();
-    }
+        Guid = entity.Guid,
+        Slug = entity.Slug,
+        Title = entity.Title,
+        CompanyName = entity.CompanyName,
+        City = entity.City,
+        WorkplaceType = entity.WorkplaceType,
+        RequiredSkills = JsonSerializer.Deserialize<List<RequiredSkill>>(entity.RequiredSkillsJson) ?? [],
+        EmploymentTypes = JsonSerializer.Deserialize<List<EmploymentType>>(entity.EmploymentTypesJson) ?? [],
+        Body = entity.Body,
+        PublishedAt = entity.PublishedAt,
+        Category = new JobCategory { Key = entity.Category },
+        ExperienceLevel = entity.ExperienceLevel
+    };
 }

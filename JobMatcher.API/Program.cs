@@ -1,14 +1,9 @@
-using System.Text;
 using JobMatcher.API.Data;
+using JobMatcher.API.Extensions;
 using JobMatcher.API.Repositories;
 using JobMatcher.API.Repositories.Interfaces;
 using JobMatcher.API.Services;
-using JobMatcher.API.Services.Claude;
-using JobMatcher.API.Services.Interfaces;
-using JobMatcher.API.Services.JustJoinIt;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,37 +29,12 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-// Repositories
 builder.Services.AddScoped<IJobRepository, JobRepository>();
+builder.Services.AddSingleton<DocxTextExtractorService>();
 
-// Services
-builder.Services.AddHttpClient<IJobFetcherService, JustJoinItFetcherService>();
-builder.Services.AddHttpClient<IAiScoringService, ClaudeAiScoringService>();
-builder.Services.AddHttpClient<IAiCvParserService, ClaudeAiCvParserService>();
-builder.Services.AddScoped<IJobScoringOrchestrator, JobScoringOrchestrator>();
-builder.Services.AddScoped<DocxTextExtractorService>();
-builder.Services.AddScoped<AuthService>();
-
-// JWT Authentication
-var jwtKey = builder.Configuration["Jwt:Key"]
-    ?? throw new InvalidOperationException("Jwt:Key is not configured");
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
-        };
-    });
-
-builder.Services.AddAuthorization();
+builder.Services.AddAiServices(builder.Configuration);
+builder.Services.AddJobBoard();
+builder.Services.AddJwtAuthentication();
 
 var app = builder.Build();
 

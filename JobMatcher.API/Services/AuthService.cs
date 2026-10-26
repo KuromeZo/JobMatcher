@@ -1,10 +1,12 @@
-﻿using System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using JobMatcher.API.Configuration;
 using JobMatcher.API.Data;
 using JobMatcher.API.Models.Domain;
 using JobMatcher.API.Models.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace JobMatcher.API.Services;
@@ -12,20 +14,20 @@ namespace JobMatcher.API.Services;
 public class AuthService
 {
     private readonly AppDbContext _db;
-    private readonly IConfiguration _config;
+    private readonly JwtOptions _jwt;
     private readonly ILogger<AuthService> _logger;
 
-    public AuthService(AppDbContext db, IConfiguration config, ILogger<AuthService> logger)
+    public AuthService(AppDbContext db, IOptions<JwtOptions> jwt, ILogger<AuthService> logger)
     {
         _db = db;
-        _config = config;
+        _jwt = jwt.Value;
         _logger = logger;
     }
 
-    public async Task<AuthResponse?> RegisterAsync(RegisterRequest request)
+    /// <summary>Returns null if the login is already taken.</summary>
+    public async Task<AuthResponse?> RegisterAsync(RegisterRequest request, CancellationToken ct)
     {
-        var exists = await _db.Users.AnyAsync(u => u.Login == request.Login);
-        if (exists)
+        if (await _db.Users.AnyAsync(u => u.Login == request.Login, ct))
         {
             _logger.LogWarning("Registration failed - login already exists: {Login}", request.Login);
             return null;
@@ -39,24 +41,20 @@ public class AuthService
         };
 
         _db.Users.Add(user);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(ct);
 
         _logger.LogInformation("User registered: {Login}", request.Login);
         return GenerateToken(user);
     }
 
-    public async Task<AuthResponse?> LoginAsync(LoginRequest request)
+    /// <summary>Returns null if the login or password is wrong.</summary>
+    public async Task<AuthResponse?> LoginAsync(LoginRequest request, CancellationToken ct)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Login == request.Login);
-        if (user == null)
-        {
-            _logger.LogWarning("Login failed - user not found: {Login}", request.Login);
-            return null;
-        }
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Login == request.Login, ct);
 
-        if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
-            _logger.LogWarning("Login failed - wrong password: {Login}", request.Login);
+            _logger.LogWarning("Login failed for {Login}", request.Login);
             return null;
         }
 
@@ -66,10 +64,7 @@ public class AuthService
 
     private AuthResponse GenerateToken(UserEntity user)
     {
-        var jwtKey = _config["Jwt:Key"]
-            ?? throw new InvalidOperationException("Jwt:Key is not configured");
-
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.Key));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var claims = new[]
@@ -79,10 +74,10 @@ public class AuthService
         };
 
         var token = new JwtSecurityToken(
-            issuer: _config["Jwt:Issuer"],
-            audience: _config["Jwt:Audience"],
+            issuer: _jwt.Issuer,
+            audience: _jwt.Audience,
             claims: claims,
-            expires: DateTime.UtcNow.AddHours(24),
+            expires: DateTime.UtcNow.AddHours(_jwt.ExpiresInHours),
             signingCredentials: credentials
         );
 
