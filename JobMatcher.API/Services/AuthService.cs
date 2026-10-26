@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using JobMatcher.API.Configuration;
@@ -41,7 +41,17 @@ public class AuthService
         };
 
         _db.Users.Add(user);
-        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Lost a race with a concurrent registration: the unique index on Login rejected the insert
+            _logger.LogWarning("Registration failed - login was taken concurrently: {Login}", request.Login);
+            return null;
+        }
 
         _logger.LogInformation("User registered: {Login}", request.Login);
         return GenerateToken(user);
