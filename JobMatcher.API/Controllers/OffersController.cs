@@ -1,15 +1,17 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using JobMatcher.API.Infrastructure;
 using JobMatcher.API.Models.Domain;
 using JobMatcher.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace JobMatcher.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
+[EnableRateLimiting(RateLimitPolicies.Ai)]
 public class OffersController : ControllerBase
 {
     private readonly IJobScoringOrchestrator _orchestrator;

@@ -1,7 +1,9 @@
+﻿using JobMatcher.API.Infrastructure;
 using JobMatcher.API.Services;
 using JobMatcher.API.Services.Interfaces;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace JobMatcher.API.Controllers;
 
@@ -10,6 +12,8 @@ namespace JobMatcher.API.Controllers;
 [Authorize]
 public class CvController : ControllerBase
 {
+    private const long MaxFileSize = 5 * 1024 * 1024;
+
     private readonly DocxTextExtractorService _extractor;
     private readonly IAiCvParserService _parser;
     private readonly ILogger<CvController> _logger;
@@ -25,24 +29,28 @@ public class CvController : ControllerBase
     }
 
     [HttpPost("upload")]
-    public async Task<IActionResult> UploadCv(IFormFile file, CancellationToken ct)
+    [RequestSizeLimit(MaxFileSize)]
+    [EnableRateLimiting(RateLimitPolicies.Ai)]
+    public async Task<IActionResult> UploadCv(IFormFile? file, CancellationToken ct)
     {
         if (file == null || file.Length == 0)
-            return BadRequest("No file uploaded");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "No file uploaded");
 
         if (!file.FileName.EndsWith(".docx", StringComparison.OrdinalIgnoreCase))
-            return BadRequest("Only .docx files are supported");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Only .docx files are supported");
 
-        _logger.LogInformation("Processing CV: {FileName}", file.FileName);
-
-        using var stream = file.OpenReadStream();
+        await using var stream = file.OpenReadStream();
         var text = _extractor.ExtractText(stream);
 
+        if (text == null)
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "The file is not a valid .docx document");
+
         if (string.IsNullOrWhiteSpace(text))
-            return BadRequest("Could not extract text from document");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, title: "Could not extract text from document");
 
         _logger.LogInformation("Extracted {Length} characters from CV", text.Length);
 
+        // AiServiceException is turned into a 502 by GlobalExceptionHandler
         var profile = await _parser.ParseCvAsync(text, ct);
 
         return Ok(profile);
