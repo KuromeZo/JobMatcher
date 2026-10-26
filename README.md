@@ -58,16 +58,18 @@ Results stream in as they're scored, so you see matches appear one by one instea
 ```
 JobMatcher/
 ├── JobMatcher.API/              ASP.NET Core backend
+│   ├── Configuration/           Strongly typed options (validated at startup)
 │   ├── Controllers/             HTTP layer only
-│   ├── Data/                    EF Core DbContext
+│   ├── Data/                    EF Core DbContext and migrations
+│   ├── Extensions/              Service registration (AI, job board, JWT)
+│   ├── Infrastructure/          Exception handler, rate limit policies
 │   ├── Models/
 │   │   ├── Domain/              Business objects
-│   │   ├── External/            DTOs for JustJoinIT and Claude
+│   │   ├── External/            DTOs for JustJoinIT, Claude and Gemini
 │   │   └── Persistence/         EF entities
 │   ├── Repositories/            Data access
 │   └── Services/
-│       ├── Claude/              Claude scoring + CV parsing
-│       ├── Gemini/              Gemini alternative (swappable)
+│       ├── Ai/                  Scoring + CV parsing, Claude and Gemini clients
 │       ├── JustJoinIt/          Job fetching
 │       └── Interfaces/          Abstractions for DI
 └── job-matcher-ui/              Angular frontend
@@ -81,7 +83,7 @@ JobMatcher/
 
 ### Design decisions
 
-**AI provider is swappable.** `IAiScoringService` and `IAiCvParserService` abstract the AI backend. Claude and Gemini implementations both exist — switching is one line in `Program.cs`. Claude Haiku is the default; it's roughly 20× cheaper than Sonnet and handles structured JSON output fine.
+**AI provider is swappable.** `IAiScoringService` and `IAiCvParserService` abstract the AI backend. Scoring and CV parsing only depend on `ILlmClient`; Claude and Gemini clients both exist and the provider is picked by the `Ai:Provider` setting (`Claude` or `Gemini`). Claude Haiku is the default; it's roughly 20× cheaper than Sonnet and handles structured JSON output fine.
 
 **CV text is extracted before it reaches the AI.** Rather than sending the file directly, `DocxTextExtractorService` pulls out plain text first. This keeps CV parsing provider-agnostic — different AI APIs handle file uploads differently, but they all take text.
 
@@ -90,6 +92,14 @@ JobMatcher/
 **Job offers are shared, scores are per-user.** `JobOffers` is a common cache — fetching the same listing once serves everyone. `ScoredJobs` is keyed by `UserId`, since the same job scores differently against different profiles.
 
 **Pagination stops early on repeats.** The fetcher sorts by newest and stops after 5 consecutive already-known offers, which cuts HTTP calls sharply on repeat runs. Offers missed by that early stop are recovered from the database by category and level.
+
+**Scoring is parallel and cancellable.** Cached scores are streamed first. Offers that need scoring go through up to 4 parallel AI calls; results come back through a `Channel` and are saved to the database one at a time, since `DbContext` is not thread-safe. The request's `CancellationToken` flows down to `HttpClient` and EF Core, so closing the tab stops the AI calls.
+
+**External calls are resilient.** HTTP clients use the standard resilience handler: retries with backoff on 429/5xx (honoring `Retry-After`), timeouts and a circuit breaker.
+
+**The demo is protected.** Rate limits: 10 auth requests per minute per IP, 20 AI requests per hour per user. Errors are returned as `ProblemDetails`, and requests are validated before anything is fetched or scored.
+
+**Offers live as long as on the job board.** Each offer stores JustJoinIT's `expiredAt`, which is refreshed whenever the offer shows up in a listing again (employers can extend it). Expired offers and their scores are deleted at the start of every run.
 
 **Streaming is line-by-line.** Returning `IAsyncEnumerable` directly gets buffered by ASP.NET Core. The controller writes each NDJSON line and calls `Response.Body.FlushAsync()` explicitly so results actually arrive incrementally.
 
@@ -101,9 +111,7 @@ JobMatcher/
 POST /api/auth/register        Public — returns JWT
 POST /api/auth/login           Public — returns JWT
 
-GET  /api/offers/fetch         Job metadata
-GET  /api/offers/score         Score with default profile
-POST /api/offers/score         Score with supplied profile and filters
+POST /api/offers/score         Score with supplied profile and filters, sorted by score
 POST /api/offers/score/stream  Same, streamed as NDJSON
 
 POST /api/cv/upload            .docx → parsed CandidateProfile
@@ -170,7 +178,7 @@ cd JobMatcher.API
 dotnet run
 ```
 
-Runs on `http://localhost:5212`. Tables are created automatically on first start via `EnsureCreated()`.
+Runs on `http://localhost:5212`. The database schema is created and kept up to date automatically on startup by EF Core migrations.
 
 ### Frontend
 
@@ -184,6 +192,20 @@ Runs on `http://localhost:4200`. `proxy.conf.json` forwards `/api` to the backen
 
 ---
 
+## Database migrations
+
+Schema changes go through EF Core migrations in `JobMatcher.API/Data/Migrations`. `dotnet-ef` is pinned as a local tool:
+
+```bash
+dotnet tool restore
+cd JobMatcher.API
+dotnet dotnet-ef migrations add <Name> -o Data/Migrations
+```
+
+Pending migrations are applied when the API starts. Databases created by the old `EnsureCreated()` code are detected and marked as already having `InitialCreate`, so only the newer migrations run on them and the data is kept.
+
+---
+
 ## Deployment
 
 Both services auto-deploy on push to `master`.
@@ -193,6 +215,7 @@ Both services auto-deploy on push to `master`.
 ```
 ConnectionStrings__DefaultConnection
 ClaudeApi__ApiKey
+Ai__Provider                   (optional, Claude by default)
 Jwt__Key
 Jwt__Issuer
 Jwt__Audience
@@ -207,9 +230,8 @@ ASP.NET Core maps `__` to `:`, so `Jwt__Key` fills `Jwt:Key`. Use Railway's inte
 
 ## Known limitations
 
-- `EnsureCreated()` doesn't migrate schemas. Changing an entity means dropping and recreating the database. Moving to EF Core migrations is the next step if the schema keeps evolving.
 - Changing your profile doesn't invalidate cached scores automatically — use the **Rescore** button to force a fresh pass.
-- Offers older than 30 days are deleted on each run, along with their scores.
+- An offer closed early by the employer stays until its `expiredAt` date. Offers stored before expiry dates were tracked are deleted 30 days after they were fetched.
 - The candidate profile lives in `localStorage`, keyed by user id. It doesn't sync across devices.
 
 ---
