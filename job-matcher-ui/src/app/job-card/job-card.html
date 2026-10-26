@@ -2,7 +2,7 @@
   <ng-template pTemplate="header">
     <div class="job-card__header">
       <div class="score-badge">
-        <p-tag [severity]="scoreSeverity" [value]="job().score + '/10'" [rounded]="true" />
+        <p-tag [severity]="scoreSeverity()" [value]="job().score + '/10'" [rounded]="true" />
       </div>
       <div class="job-info">
         <h3 class="job-title">{{ job().offer.title }}</h3>

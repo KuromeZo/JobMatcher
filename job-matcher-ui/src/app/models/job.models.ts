@@ -11,6 +11,11 @@ export interface EmploymentType {
   unit: string;
 }
 
+export interface JobCategory {
+  key: string;
+  parentKey: string | null;
+}
+
 export interface JobOffer {
   guid: string;
   slug: string;
@@ -19,7 +24,7 @@ export interface JobOffer {
   city: string;
   workplaceType: string;
   experienceLevel: string;
-  category: string;
+  category: JobCategory | null;
   requiredSkills: RequiredSkill[];
   niceToHaveSkills: RequiredSkill[];
   employmentTypes: EmploymentType[];
@@ -34,7 +39,18 @@ export interface ScoredJob {
   verdict: string;
 }
 
-export interface ScoreResponse {
-  total: number;
-  jobs: ScoredJob[];
+export interface CandidateProfile {
+  skills: string[];
+  level: string;
+  description: string;
+}
+
+export interface ScoreRequest {
+  profile: CandidateProfile;
+  filters: {
+    categories: string[];
+    experienceLevels: string[];
+  };
+  minScore: number;
+  forceRescore: boolean;
 }

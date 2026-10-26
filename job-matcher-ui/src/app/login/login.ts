@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
+import { toApiError } from '../services/api-error';
 import { CardModule } from 'primeng/card';
 import { InputTextModule } from 'primeng/inputtext';
 import { PasswordModule } from 'primeng/password';
@@ -39,7 +40,7 @@ export class Login {
     action.subscribe({
       next: () => this.router.navigate(['/']),
       error: (err) => {
-        this.error.set(err.status === 401 ? 'Invalid login or password' : 'Something went wrong');
+        this.error.set(toApiError(err, 'Something went wrong').message);
         this.loading.set(false);
       }
     });

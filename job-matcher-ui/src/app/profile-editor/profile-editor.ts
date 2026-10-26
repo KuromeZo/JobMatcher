@@ -1,5 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormGroup, FormArray, Validators, ReactiveFormsModule } from '@angular/forms';
+import { firstValueFrom } from 'rxjs';
 import { CardModule } from 'primeng/card';
 import { InputTextModule } from 'primeng/inputtext';
 import { TextareaModule } from 'primeng/textarea';
@@ -7,8 +9,10 @@ import { SelectModule } from 'primeng/select';
 import { ButtonModule } from 'primeng/button';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { DividerModule } from 'primeng/divider';
-import { AuthService } from '../services/auth';
-import { environment } from '../../environments/environment';
+import { ApiService } from '../services/api.service';
+import { ProfileService } from '../services/profile.service';
+import { toApiError } from '../services/api-error';
+import { CandidateProfile } from '../models/job.models';
 
 @Component({
   selector: 'app-profile-editor',
@@ -22,11 +26,14 @@ import { environment } from '../../environments/environment';
 })
 export class ProfileEditor {
   private fb = inject(FormBuilder);
-  private auth = inject(AuthService);
+  private api = inject(ApiService);
+  private profiles = inject(ProfileService);
 
   uploading = signal(false);
   uploadError = signal<string | null>(null);
   profileReady = signal(false);
+  saved = signal(false);
+  saveError = signal<string | null>(null);
 
   readonly levelOptions = [
     { label: 'Intern', value: 'intern' },
@@ -42,18 +49,10 @@ export class ProfileEditor {
   });
 
   constructor() {
-    const saved = localStorage.getItem(this.auth.getProfileStorageKey());
-    if (saved) {
-      const profile = JSON.parse(saved);
-      this.form.patchValue({
-        level: profile.level,
-        description: profile.description,
-      });
-      this.skills.clear();
-      (profile.skills as string[]).forEach(s =>
-        this.skills.push(this.fb.control(s))
-      );
-    }
+    const saved = this.profiles.load();
+    if (saved) this.fillForm(saved);
+
+    this.form.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => this.saved.set(false));
   }
 
   get skills(): FormArray {
@@ -76,6 +75,8 @@ export class ProfileEditor {
     const input = event.target as HTMLInputElement;
     if (!input.files?.length) return;
     this.uploadCv(input.files[0]);
+    // Lets the user pick the same file again after an error
+    input.value = '';
   }
 
   onDrop(event: DragEvent): void {
@@ -89,7 +90,7 @@ export class ProfileEditor {
   }
 
   async uploadCv(file: File): Promise<void> {
-    if (!file.name.endsWith('.docx')) {
+    if (!file.name.toLowerCase().endsWith('.docx')) {
       this.uploadError.set('Only .docx format is supported');
       return;
     }
@@ -98,44 +99,39 @@ export class ProfileEditor {
     this.uploadError.set(null);
     this.profileReady.set(false);
 
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const token = this.auth.getToken();
-
     try {
-      const response = await fetch(`${environment.apiUrl}/api/cv/upload`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-      });
-
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-      const profile = await response.json();
-
-      this.form.patchValue({
-        level: profile.level,
-        description: profile.description,
-      });
-
-      this.skills.clear();
-      (profile.skills as string[]).forEach(s =>
-        this.skills.push(this.fb.control(s))
-      );
-      this.form.updateValueAndValidity();
-
+      const profile = await firstValueFrom(this.api.uploadCv(file));
+      this.fillForm(profile);
       this.profileReady.set(true);
     } catch (err) {
-      this.uploadError.set('Failed to upload CV. Please try again.');
+      this.uploadError.set(toApiError(err, 'Failed to upload CV. Please try again.').message);
       console.error(err);
     } finally {
       this.uploading.set(false);
     }
   }
 
-  saveToStorage(): void {
-    localStorage.setItem(this.auth.getProfileStorageKey(), JSON.stringify(this.form.value));
-    alert('Profile saved!');
+  saveProfile(): void {
+    const value = this.form.value as CandidateProfile;
+    const skills = value.skills.map(s => s.trim()).filter(s => s.length > 0);
+
+    if (skills.length === 0) {
+      this.saveError.set('Add at least one skill');
+      return;
+    }
+
+    this.profiles.save({ ...value, skills });
+    this.saveError.set(null);
+    this.saved.set(true);
+  }
+
+  private fillForm(profile: CandidateProfile): void {
+    this.form.patchValue({
+      level: profile.level,
+      description: profile.description,
+    });
+
+    this.skills.clear();
+    profile.skills.forEach(s => this.skills.push(this.fb.control(s)));
   }
 }

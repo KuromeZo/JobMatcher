@@ -1,12 +1,10 @@
-import { HttpInterceptorFn, HttpRequest, HttpHandlerFn } from '@angular/common/http';
+import { HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { catchError, throwError } from 'rxjs';
-import { Router } from '@angular/router';
 import { AuthService } from './auth';
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const authService = inject(AuthService);
-  const router = inject(Router);
 
   const token = authService.getToken();
 
@@ -16,9 +14,9 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 
   return next(authReq).pipe(
     catchError(err => {
-      if (err.status === 401) {
+      // A 401 from login itself just means a wrong password, not an expired session
+      if (err.status === 401 && !req.url.includes('/api/auth/')) {
         authService.logout();
-        router.navigate(['/login']);
       }
       return throwError(() => err);
     })

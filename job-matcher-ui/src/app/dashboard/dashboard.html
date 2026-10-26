@@ -51,7 +51,7 @@
         <label for="remoteOnly">Remote only</label>
       </div>
 
-      <p-button label="Find jobs" icon="pi pi-search" (onClick)="loadJobs()" [disabled]="loading()" />
+      <p-button label="Find jobs" icon="pi pi-search" (onClick)="loadJobs()" [disabled]="loading() || !hasProfile" />
 
       @if (hasSearched()) {
         <p-button label="Rescore" icon="pi pi-refresh" [outlined]="true" (onClick)="rescoreJobs()" [disabled]="loading()" />
@@ -65,10 +65,10 @@
     </div>
   </div>
 
-  @if (loading()) {
+  @if (!hasProfile) {
     <div class="state">
-      <p-progressSpinner styleClass="spinner-sm" strokeWidth="4" />
-      <p>Scoring jobs… {{ loadedCount() > 0 ? 'found ' + loadedCount() : '' }}</p>
+      <i class="pi pi-user"></i>
+      <p>Fill in your <a routerLink="/profile">profile</a> first, so the AI knows what to compare jobs against.</p>
     </div>
   } @else if (error()) {
     <div class="state state--error">
@@ -80,12 +80,22 @@
       <i class="pi pi-search"></i>
       <p>Choose categories and click "Find jobs"</p>
     </div>
-  } @else if (filteredJobs().length === 0) {
+  } @else if (!loading() && filteredJobs().length === 0) {
     <div class="state">
       <i class="pi pi-inbox"></i>
       <p>No matching jobs found.</p>
     </div>
-  } @else {
+  }
+
+  <!-- Results are shown while the stream is still running, that is the point of streaming -->
+  @if (loading()) {
+    <div class="state state--inline">
+      <p-progressSpinner styleClass="spinner-sm" strokeWidth="4" />
+      <p>Scoring jobs… {{ jobs().length > 0 ? 'found ' + jobs().length : '' }}</p>
+    </div>
+  }
+
+  @if (filteredJobs().length > 0) {
     <div class="grid">
       @for (job of filteredJobs(); track job.offer.guid) {
         <app-job-card [job]="job" />

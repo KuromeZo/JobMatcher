@@ -132,6 +132,16 @@
   &--error {
     color: var(--p-red-400);
   }
+
+  // Progress line above results that are already streaming in
+  &--inline {
+    flex-direction: row;
+    padding: 0 0 1.5rem;
+  }
+
+  a {
+    color: var(--p-primary-color);
+  }
 }
 
 .grid {

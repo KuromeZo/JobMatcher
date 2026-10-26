@@ -9,6 +9,9 @@ interface AuthResponse {
   token: string;
 }
 
+// ASP.NET writes ClaimTypes.NameIdentifier under its full URI unless claim mapping is turned off
+const NAME_ID_CLAIM = 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier';
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private http = inject(HttpClient);
@@ -37,27 +40,28 @@ export class AuthService {
     return localStorage.getItem(this.TOKEN_KEY);
   }
 
+  /** True only for a token that has not expired yet, so the guard doesn't let in a dead session. */
   isLoggedIn(): boolean {
-    return !!this.getToken();
+    const exp = this.decodePayload()?.['exp'];
+    return typeof exp === 'number' && exp * 1000 > Date.now();
   }
 
-
   getUserId(): string | null {
+    const payload = this.decodePayload();
+    const id = payload?.['nameid'] ?? payload?.[NAME_ID_CLAIM];
+    return typeof id === 'string' ? id : null;
+  }
+
+  private decodePayload(): Record<string, unknown> | null {
     const token = this.getToken();
     if (!token) return null;
 
     try {
       const payload = token.split('.')[1];
-      const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
-      return decoded['nameid'] ?? decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] ?? null;
+      return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
     } catch {
       return null;
     }
-  }
-
-  getProfileStorageKey(): string {
-    const userId = this.getUserId();
-    return userId ? `candidate_profile_${userId}` : 'candidate_profile_anonymous';
   }
 
   private saveToken(token: string): void {
