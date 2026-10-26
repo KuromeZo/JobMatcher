@@ -1,73 +1,40 @@
-@JobMatcher.API_HostAddress = http://localhost:5212
+@host = http://localhost:5212
+# Paste the token returned by Register or Login
+@token = PASTE_TOKEN_HERE
 
-### Fetch offers
-GET http://localhost:5212/api/offers/fetch
-Accept: application/json
+### Register
+POST {{host}}/api/auth/register
+Content-Type: application/json
 
-###
+{
+  "login": "test-user",
+  "password": "123456"
+}
 
-### Score offers
-GET http://localhost:5212/api/offers/score
-Accept: application/json
+### Login
+POST {{host}}/api/auth/login
+Content-Type: application/json
 
-###
+{
+  "login": "test-user",
+  "password": "123456"
+}
 
 ### Upload CV
-POST http://localhost:5212/api/cv/upload
+POST {{host}}/api/cv/upload
+Authorization: Bearer {{token}}
 Content-Type: multipart/form-data; boundary=boundary
 
 --boundary
-Content-Disposition: form-data; name="file"; filename="Martin_Zanko_CV_NET.docx"
+Content-Disposition: form-data; name="file"; filename="cv.docx"
 Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
 
-< C:/CV_temples/CV_NET/Martin_Zanko_CV_NET.docx
+< ./cv.docx
 --boundary--
 
-### Register
-POST http://localhost:5212/api/auth/register
-Content-Type: application/json
-
-{
-  "login": "martin",
-  "password": "123456"
-}
-
-###
-
-### Login
-POST http://localhost:5212/api/auth/login
-Content-Type: application/json
-
-{
-  "login": "martin",
-  "password": "123456"
-}
-
-###
-
-### Fetch with custom filters - check logs
-POST http://localhost:5212/api/offers/score
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6IjEiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoibWFydGluIiwiZXhwIjoxNzgzODgwMDIwLCJpc3MiOiJKb2JNYXRjaGVyIiwiYXVkIjoiSm9iTWF0Y2hlclVzZXJzIn0.Sw9NOiJ3XtOlHy1Qx6gN9zbGJlPBfpZ1qsSf4vcXvIw
-Content-Type: application/json
-
-{
-  "profile": {"skills": ["Python"], "level": "mid", "description": "test"},
-  "filters": {"categories": ["python"], "experienceLevels": ["mid"]}
-}
-
-### Fetch with custom filters - javascript mid stream
-POST http://localhost:5212/api/offers/score/stream
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6IjEiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoibWFydGluIiwiZXhwIjoxNzgzODgwMDIwLCJpc3MiOiJKb2JNYXRjaGVyIiwiYXVkIjoiSm9iTWF0Y2hlclVzZXJzIn0.Sw9NOiJ3XtOlHy1Qx6gN9zbGJlPBfpZ1qsSf4vcXvIw
-Content-Type: application/json
-
-{
-  "profile": {"skills": ["JavaScript", "TypeScript", "React"], "level": "mid", "description": "JavaScript developer"},
-  "filters": {"categories": ["javascript"], "experienceLevels": ["mid"]}
-}
-
-### Fetch with custom filters - net junior stream
-POST http://localhost:5212/api/offers/score/stream
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6IjEiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoibWFydGluIiwiZXhwIjoxNzgzODkxNTgwLCJpc3MiOiJKb2JNYXRjaGVyIiwiYXVkIjoiSm9iTWF0Y2hlclVzZXJzIn0.yl9PkpKYz0cbgv_ZYxICL4fIAU2p7CublXvNf2E0BHo
+### Score - full list, sorted by score
+POST {{host}}/api/offers/score
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -75,34 +42,24 @@ Content-Type: application/json
   "filters": {"categories": ["net"], "experienceLevels": ["junior"]}
 }
 
-
-### Register 2
-POST http://localhost:5212/api/auth/register
+### Score - NDJSON stream
+POST {{host}}/api/offers/score/stream
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-  "login": "martin2",
-  "password": "1234567"
-}
-
-### user2 - net junior stream
-POST http://localhost:5212/api/offers/score/stream
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6IjIiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoibWFydGluMiIsImV4cCI6MTc4Mzg5MTczMSwiaXNzIjoiSm9iTWF0Y2hlciIsImF1ZCI6IkpvYk1hdGNoZXJVc2VycyJ9.7CnhmExn4RZ0uhF-IW6bUu751wK3qHohFf2G7VXcjYU
-Content-Type: application/json
-
-{
-  "profile": {"skills": ["Java", "Spring"], "level": "junior", "description": "Java developer"},
-  "filters": {"categories": ["net"], "experienceLevels": ["junior"]}
-}
-
-### ForceRescore test
-POST http://localhost:5212/api/offers/score/stream
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6IjEiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoibWFydGluIiwiZXhwIjoxNzgzODkxNTgwLCJpc3MiOiJKb2JNYXRjaGVyIiwiYXVkIjoiSm9iTWF0Y2hlclVzZXJzIn0.yl9PkpKYz0cbgv_ZYxICL4fIAU2p7CublXvNf2E0BHo
-Content-Type: application/json
-
-{
-  "profile": {"skills": ["C#", ".NET"], "level": "junior", "description": "test"},
+  "profile": {"skills": ["C#", ".NET", "ASP.NET Core", "SQL"], "level": "junior", "description": "Junior .NET developer"},
   "filters": {"categories": ["net"], "experienceLevels": ["junior"]},
   "minScore": 6,
-  "forceRescore": true
+  "forceRescore": false
+}
+
+### Validation error - empty profile, unknown category
+POST {{host}}/api/offers/score/stream
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "profile": {"skills": []},
+  "filters": {"categories": ["net&x=1"], "experienceLevels": ["junior"]}
 }
